@@ -207,6 +207,8 @@ public:
   const std::optional<std::string>& schemeToSet() const override { return scheme_to_set_; }
   bool shouldSchemeMatchUpstream() const override { return should_scheme_match_upstream_; }
   Http::ConnectionManagerStats& stats() override { return stats_; }
+  OptRef<Http::ConnectionManagerPerWorkerStats>
+  perWorkerStats(const std::string& dispatcher_name) override;
   Http::ConnectionManagerTracingStats& tracingStats() override { return tracing_stats_; }
   bool useRemoteAddress() const override { return use_remote_address_; }
   const Http::InternalAddressConfig& internalAddressConfig() const override {
@@ -313,6 +315,7 @@ private:
   mutable Http::Http2::CodecStats::AtomicPtr http2_codec_stats_;
   mutable Http::Http3::CodecStats::AtomicPtr http3_codec_stats_;
   Http::ConnectionManagerTracingStats tracing_stats_;
+  absl::flat_hash_map<std::string, Http::ConnectionManagerPerWorkerStats> per_worker_stats_;
   const bool use_remote_address_{};
   const std::unique_ptr<Http::InternalAddressConfig> internal_address_config_;
   const uint32_t xff_num_trusted_hops_;

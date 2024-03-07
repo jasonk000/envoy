@@ -91,6 +91,10 @@ public:
   const std::optional<std::string>& schemeToSet() const override { return parent_.schemeToSet(); }
   bool shouldSchemeMatchUpstream() const override { return parent_.shouldSchemeMatchUpstream(); }
   ConnectionManagerStats& stats() override { return parent_.stats(); }
+  OptRef<Http::ConnectionManagerPerWorkerStats>
+  perWorkerStats(const std::string& dispatcher_name) override {
+    return parent_.perWorkerStats(dispatcher_name);
+  }
   ConnectionManagerTracingStats& tracingStats() override { return parent_.tracingStats(); }
   bool useRemoteAddress() const override { return parent_.useRemoteAddress(); }
   const InternalAddressConfig& internalAddressConfig() const override {
@@ -171,7 +175,7 @@ HttpConnectionManagerImplMixin::HttpConnectionManagerImplMixin()
                  POOL_COUNTER(*fake_stats_.rootScope()), POOL_GAUGE(*fake_stats_.rootScope()),
                  POOL_HISTOGRAM(*fake_stats_.rootScope()), POOL_COUNTER(*fake_stats_.rootScope()))},
              *fake_stats_.rootScope()),
-
+      per_worker_stats_({CONN_MAN_PER_WORKER_STATS(POOL_COUNTER(*fake_stats_.rootScope()))}),
       listener_stats_({CONN_MAN_LISTENER_STATS(POOL_COUNTER(fake_listener_stats_),
                                                POOL_COUNTER(fake_listener_stats_))}),
       request_id_extension_(

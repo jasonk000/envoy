@@ -182,6 +182,9 @@ public:
   }
   Http::ConnectionManagerStats& stats() override { return stats_; }
   Http::ConnectionManagerTracingStats& tracingStats() override { return tracing_stats_; }
+  OptRef<Http::ConnectionManagerPerWorkerStats> perWorkerStats(const std::string&) override {
+    return absl::nullopt;
+  }
   bool useRemoteAddress() const override { return true; }
   const Http::InternalAddressConfig& internalAddressConfig() const override {
     return internal_address_config_;

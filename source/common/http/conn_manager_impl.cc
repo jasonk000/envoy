@@ -190,6 +190,11 @@ ConnectionManagerImpl::generateListenerStats(absl::string_view stat_prefix, Stat
       POOL_COUNTER_RESPONSE_CODE_CLASS(scope, prefix.baseName(), prefix.tags(), prefix.name()))};
 }
 
+ConnectionManagerPerWorkerStats
+ConnectionManagerImpl::generatePerWorkerStats(const std::string& prefix, Stats::Scope& scope) {
+  return {CONN_MAN_PER_WORKER_STATS(POOL_COUNTER_PREFIX(scope, prefix))};
+}
+
 ConnectionManagerImpl::ConnectionManagerImpl(
     ConnectionManagerConfigSharedPtr config, const Network::DrainDecision& drain_close,
     Random::RandomGenerator& random_generator, Http::Context& http_context,
@@ -254,6 +259,7 @@ const ResponseHeaderMap& ConnectionManagerImpl::continueHeader() {
 
 void ConnectionManagerImpl::initializeReadFilterCallbacks(Network::ReadFilterCallbacks& callbacks) {
   read_callbacks_ = &callbacks;
+  per_worker_stats_ = config_->perWorkerStats(read_callbacks_->connection().dispatcher().name());
   dispatcher_ = &callbacks.connection().dispatcher();
   if (max_requests_during_dispatch_ != UINT32_MAX) {
     deferred_request_processing_callback_ =
@@ -1054,6 +1060,9 @@ ConnectionManagerImpl::ActiveStream::ActiveStream(ConnectionManagerImpl& connect
 
   connection_manager_.stats_.named_.downstream_rq_total_.inc();
   connection_manager_.stats_.named_.downstream_rq_active_.inc();
+  if (connection_manager_.per_worker_stats_) {
+    connection_manager_.per_worker_stats_->downstream_rq_.inc();
+  }
   if (connection_manager_.codec_->protocol() == Protocol::Http2) {
     connection_manager_.stats_.named_.downstream_rq_http2_total_.inc();
   } else if (connection_manager_.codec_->protocol() == Protocol::Http3) {

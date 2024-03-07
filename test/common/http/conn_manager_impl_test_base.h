@@ -188,6 +188,9 @@ public:
   bool shouldSchemeMatchUpstream() const override { return scheme_match_upstream_; }
   ConnectionManagerStats& stats() override { return stats_; }
   ConnectionManagerTracingStats& tracingStats() override { return tracing_stats_; }
+  OptRef<Http::ConnectionManagerPerWorkerStats> perWorkerStats(const std::string&) override {
+    return per_worker_stats_;
+  }
   bool useRemoteAddress() const override { return use_remote_address_; }
   const Http::InternalAddressConfig& internalAddressConfig() const override {
     return internal_address_config_;
@@ -305,6 +308,7 @@ public:
   NiceMock<MockFilterChainFactory> filter_factory_;
   ConnectionManagerStats stats_;
   ConnectionManagerTracingStats tracing_stats_{CONN_MAN_TRACING_STATS(POOL_COUNTER(fake_stats_))};
+  ConnectionManagerPerWorkerStats per_worker_stats_;
   NiceMock<Network::MockDrainDecision> drain_close_;
   // The drain type of the listener owning the connection, served to the connection manager via
   // `listener_info_`. DEFAULT means /healthcheck/fail drain-closes; tests that exercise the health

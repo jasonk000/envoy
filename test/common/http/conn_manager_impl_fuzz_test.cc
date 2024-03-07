@@ -59,6 +59,7 @@ public:
                    POOL_HISTOGRAM(*fake_stats_.rootScope()), POOL_COUNTER(fake_stats_))},
                *fake_stats_.rootScope()),
         tracing_stats_{CONN_MAN_TRACING_STATS(POOL_COUNTER(fake_stats_))},
+        per_worker_stats_{CONN_MAN_PER_WORKER_STATS(POOL_COUNTER(fake_stats_))},
         listener_stats_{
             CONN_MAN_LISTENER_STATS(POOL_COUNTER(fake_stats_), POOL_COUNTER(fake_stats_))},
         local_reply_(LocalReply::Factory::createDefault()) {
@@ -190,6 +191,9 @@ public:
   bool shouldSchemeMatchUpstream() const override { return scheme_match_upstream_; }
   ConnectionManagerStats& stats() override { return stats_; }
   ConnectionManagerTracingStats& tracingStats() override { return tracing_stats_; }
+  OptRef<Http::ConnectionManagerPerWorkerStats> perWorkerStats(const std::string&) override {
+    return absl::nullopt;
+  }
   bool useRemoteAddress() const override { return use_remote_address_; }
   const Http::InternalAddressConfig& internalAddressConfig() const override {
     return internal_address_config_;
@@ -284,6 +288,7 @@ public:
   Stats::IsolatedStoreImpl fake_stats_;
   ConnectionManagerStats stats_;
   ConnectionManagerTracingStats tracing_stats_;
+  ConnectionManagerPerWorkerStats per_worker_stats_;
   ConnectionManagerListenerStats listener_stats_;
   uint32_t max_request_headers_kb_{Http::DEFAULT_MAX_REQUEST_HEADERS_KB};
   uint32_t max_request_headers_count_{Http::DEFAULT_MAX_HEADERS_COUNT};

@@ -729,6 +729,38 @@ TEST_F(HttpConnectionManagerConfigTest, DisableTraceContextPropagationDefault) {
   EXPECT_FALSE(config.tracingConfig()->noContextPropagation());
 }
 
+TEST_F(HttpConnectionManagerConfigTest, PerWorkerStatsAreCreated) {
+  const std::string yaml_string = R"EOF(
+codec_type: http1
+stat_prefix: my_test_prefix
+route_config:
+  virtual_hosts:
+  - name: service
+    domains:
+    - "*"
+    routes:
+    - match:
+        prefix: "/"
+      route:
+        cluster: cluster
+http_filters:
+- name: envoy.filters.http.router
+  typed_config:
+    "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  )EOF";
+
+  EXPECT_CALL(context_.server_factory_context_.options_, concurrency()).WillOnce(Return(2));
+  HttpConnectionManagerConfig config(parseHttpConnectionManagerFromYaml(yaml_string), context_,
+                                     date_provider_, route_config_provider_manager_,
+                                     &scoped_routes_config_provider_manager_, tracer_manager_,
+                                     filter_config_provider_manager_, creation_status_);
+  EXPECT_TRUE(config.perWorkerStats("worker_0").has_value());
+  EXPECT_TRUE(config.perWorkerStats("worker_1").has_value());
+  EXPECT_FALSE(config.perWorkerStats("worker_2").has_value());
+  EXPECT_EQ("http.my_test_prefix.worker_1.downstream_rq",
+            config.perWorkerStats("worker_1")->downstream_rq_.name());
+}
+
 TEST_F(HttpConnectionManagerConfigTest, DisableTraceContextPropagationEnabled) {
   const std::string yaml_string = R"EOF(
   stat_prefix: ingress_http

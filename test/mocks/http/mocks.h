@@ -678,6 +678,7 @@ public:
   MOCK_METHOD(bool, shouldSchemeMatchUpstream, (), (const));
   MOCK_METHOD(ConnectionManagerStats&, stats, ());
   MOCK_METHOD(ConnectionManagerTracingStats&, tracingStats, ());
+  MOCK_METHOD(OptRef<ConnectionManagerPerWorkerStats>, perWorkerStats, (const std::string&));
   MOCK_METHOD(bool, useRemoteAddress, (), (const));
   const Http::InternalAddressConfig& internalAddressConfig() const override {
     return *internal_address_config_;

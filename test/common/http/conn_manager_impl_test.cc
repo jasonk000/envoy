@@ -488,6 +488,21 @@ TEST_F(HttpConnectionManagerImplTest, 1xxResponseWithDecoderPause) {
   EXPECT_EQ(2U, listener_stats_.downstream_rq_completed_.value());
 }
 
+// When create new stream, the per worker request stat will be incremented.
+TEST_F(HttpConnectionManagerImplTest, ModifiesPerWorkerStats) {
+  setup(SetupOpts().setSsl(true).setTracing(false));
+
+  // Set up the codec.
+  Buffer::OwnedImpl fake_input("input");
+  conn_manager_->createCodec(fake_input);
+
+  startRequest();
+  EXPECT_EQ(1, per_worker_stats_.downstream_rq_.value());
+
+  // Clean up.
+  filter_callbacks_.connection_.raiseEvent(Network::ConnectionEvent::RemoteClose);
+}
+
 // When create new stream, the stream info will be populated from the connection.
 TEST_F(HttpConnectionManagerImplTest, PopulateStreamInfo) {
   setup(SetupOpts().setSsl(true).setTracing(false));

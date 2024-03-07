@@ -221,6 +221,57 @@ TEST_P(IntegrationTest, CpuLocalityConnectionBalancer) {
   codec_client_->close();
 }
 
+// Make sure we have correctly specified per-worker hcm performance stats.
+TEST_P(IntegrationTest, PerWorkerHCMStats) {
+  autonomous_upstream_ = true;
+  concurrency_ = 2;
+  config_helper_.addConfigModifier([&](envoy::config::bootstrap::v3::Bootstrap& bootstrap) -> void {
+    auto static_resources = bootstrap.mutable_static_resources();
+    auto* old_listener = static_resources->mutable_listeners(0);
+    auto* cloned_listener = static_resources->add_listeners();
+    cloned_listener->CopyFrom(*old_listener);
+    old_listener->set_name("http_other");
+    old_listener->mutable_connection_balance_config()->mutable_exact_balance();
+  });
+
+  // Ensure they have different stat prefixes.
+  config_helper_.addConfigModifier(
+      [](envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager&
+             hcm) { hcm.set_stat_prefix("first_stat_prefix"); });
+  initialize();
+
+  test_server_->waitForCounterExists("http.config_test.worker_0.downstream_rq");
+  test_server_->waitForCounterExists("http.config_test.worker_1.downstream_rq");
+  test_server_->waitForCounterExists("http.first_stat_prefix.worker_0.downstream_rq");
+  test_server_->waitForCounterExists("http.first_stat_prefix.worker_1.downstream_rq");
+
+  // First request on the second listener goes to either worker.
+  codec_client_ = makeHttpConnection(lookupPort("http"));
+  auto response1 = codec_client_->makeHeaderOnlyRequest(default_request_headers_);
+  ASSERT_TRUE(response1->waitForEndStream());
+  EXPECT_EQ(1, test_server_->counter("http.config_test.worker_0.downstream_rq")->value() +
+                   test_server_->counter("http.config_test.worker_1.downstream_rq")->value());
+
+  // First request on the first listener goes to either worker.
+  IntegrationCodecClientPtr codec_client2 = makeHttpConnection(lookupPort("http_other"));
+  auto response2 = codec_client2->makeHeaderOnlyRequest(default_request_headers_);
+  ASSERT_TRUE(response2->waitForEndStream());
+  EXPECT_EQ(1, test_server_->counter("http.first_stat_prefix.worker_0.downstream_rq")->value() +
+                   test_server_->counter("http.first_stat_prefix.worker_1.downstream_rq")->value());
+
+  // Second request on the first listener goes the worker that didn't receive
+  // the request prior.
+  IntegrationCodecClientPtr codec_client3 = makeHttpConnection(lookupPort("http_other"));
+  auto response3 = codec_client3->makeHeaderOnlyRequest(default_request_headers_);
+  ASSERT_TRUE(response3->waitForEndStream());
+  test_server_->waitForCounterEq("http.first_stat_prefix.worker_0.downstream_rq", 1);
+  test_server_->waitForCounterEq("http.first_stat_prefix.worker_1.downstream_rq", 1);
+
+  codec_client_->close();
+  codec_client2->close();
+  codec_client3->close();
+}
+
 class TestConnectionBalanceFactory : public Network::ConnectionBalanceFactory {
 public:
   ProtobufTypes::MessagePtr createEmptyConfigProto() override {

@@ -80,6 +80,8 @@ public:
   // 'http.<stat_prefix>.' prefix, so no prefix is prepended to the stat names.
   static ConnectionManagerStats generateStats(Stats::Scope& scope);
   static ConnectionManagerTracingStats generateTracingStats(Stats::Scope& scope);
+  static ConnectionManagerPerWorkerStats generatePerWorkerStats(const std::string& prefix,
+                                                                Stats::Scope& scope);
   static void chargeTracingStats(const Tracing::Reason& tracing_reason,
                                  ConnectionManagerTracingStats& tracing_stats);
   // Creates the 'http.<stat_prefix>.' scope in which an HTTP connection manager creates the stats.
@@ -658,6 +660,7 @@ private:
   ConnectionManagerConfigSharedPtr config_;
   ConnectionManagerStats& stats_; // We store a reference here to avoid an extra stats() call on
                                   // the config in the hot path.
+  OptRef<ConnectionManagerPerWorkerStats> per_worker_stats_;
   ServerConnectionPtr codec_;
   std::list<ActiveStreamPtr> streams_;
   Stats::TimespanPtr conn_length_;

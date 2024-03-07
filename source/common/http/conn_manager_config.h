@@ -132,6 +132,18 @@ using TracingConnectionManagerConfig = Tracing::ConnectionManagerTracingConfig;
 using TracingConnectionManagerConfigPtr = std::unique_ptr<TracingConnectionManagerConfig>;
 
 /**
+ * Connection manager per worker specific stats. @see stats_macros.h
+ */
+#define CONN_MAN_PER_WORKER_STATS(COUNTER) COUNTER(downstream_rq)
+
+/**
+ * Wrapper struct for connection manager per worker stats. @see stats_macros.h
+ */
+struct ConnectionManagerPerWorkerStats {
+  CONN_MAN_PER_WORKER_STATS(GENERATE_COUNTER_STRUCT)
+};
+
+/**
  * Connection manager per listener stats. @see stats_macros.h
  */
 #define CONN_MAN_LISTENER_STATS(COUNTER, RESPONSE_CODE_CLASS_COUNTER)                              \
@@ -397,6 +409,12 @@ public:
    * @return ConnectionManagerStats& the stats to write to.
    */
   virtual ConnectionManagerStats& stats() PURE;
+
+  /**
+   * @return absl::optional<ConnectionManagerPerWorkerStats&> the per worker stats to write to.
+   */
+  virtual OptRef<Http::ConnectionManagerPerWorkerStats>
+  perWorkerStats(const std::string& dispatcher_name) PURE;
 
   /**
    * @return ConnectionManagerTracingStats& the stats to write to.

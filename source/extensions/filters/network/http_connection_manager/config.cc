@@ -774,6 +774,24 @@ HttpConnectionManagerConfig::HttpConnectionManagerConfig(
           std::make_pair(name, FilterConfig{std::move(factories), enabled}));
     }
   }
+
+  // Create per-worker stats
+  const uint32_t num_workers = context.serverFactoryContext().options().concurrency();
+  for (uint32_t i = 0; i < num_workers; ++i) {
+    // TODO(kbaichoo): when upstreaming ensure this is shared with dispatcher creation.
+    const std::string worker_name = absl::StrCat("worker_", i);
+    per_worker_stats_.emplace(
+        worker_name, Http::ConnectionManagerImpl::generatePerWorkerStats(
+                         fmt::format("{}{}.", stats_prefix_, worker_name), context_.scope()));
+  }
+}
+
+OptRef<Http::ConnectionManagerPerWorkerStats>
+HttpConnectionManagerConfig::perWorkerStats(const std::string& dispatcher_name) {
+  if (auto it = per_worker_stats_.find(dispatcher_name); it != per_worker_stats_.end()) {
+    return it->second;
+  }
+  return absl::nullopt;
 }
 
 std::optional<std::chrono::milliseconds>
