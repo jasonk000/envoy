@@ -766,6 +766,13 @@ message Http2ProtocolOptions {
   // If unset, uses the data plane's default value.
   google.protobuf.BoolValue enable_huffman_encoding = 18;
 
+  // Disables encoding the headers using huffman encoding.
+  // This can be useful in cases where the cpu spent encoding the headers isn't
+  // worth the network bandwidth saved e.g. for localhost.
+  // We plan to upstream this, and will just pick a large field number for the
+  // current patch.
+  bool disable_huffman_internal = 200;
+
   // Configures the maximum wire-encoded size in KB of an individual header field (name or value)
   // that the ``nghttp2`` HPACK inflater will accept. This limit applies to the HPACK-compressed
   // length on the wire, not the decoded length. If not specified, defaults to ``64`` KB
