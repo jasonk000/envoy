@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package envoy.extensions.bootstrap.dynamic_file_metadata.v3;
+
+import "udpa/annotations/status.proto";
+
+option java_package = "io.envoyproxy.envoy.extensions.bootstrap.dynamic_file_metadata.v3";
+option java_outer_classname = "DynamicFileMetadataProto";
+option java_multiple_files = true;
+option go_package =
+"github.com/envoyproxy/go-control-plane/envoy/extensions/bootstrap/dynamic_file_metadata/v3;dynamic_file_metadatav3";
+option (udpa.annotations.file_status).package_version_status = ACTIVE;
+
+// [#protodoc-title: DynamicFileMetadata]
+// The dynamic file metadata extension looks at certain paths to read files copying the contents of
+// the file into ContextParams for the node. This metadata can then be used at the control-plane to
+// serve different resources given the node changes.
+// [#extension: envoy.bootstrap.dynamic_file_metadata]
+
+// TODO(): exercise for the reader to add configuration for:
+// 1. Directory Structures
+// 2. Individual files.
+// Or we just support directory structures and don't pollute watched directories.
+message DynamicFileMetadata {
+}
+

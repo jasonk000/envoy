@@ -117,6 +117,13 @@ envoy.bootstrap.reverse_tunnel.upstream_socket_interface:
   status: wip
   type_urls:
   - envoy.extensions.bootstrap.reverse_tunnel.upstream_socket_interface.v3.UpstreamReverseConnectionSocketInterface
+envoy.bootstrap.dynamic_file_metadata:
+  categories:
+  - envoy.bootstrap
+  security_posture: robust_to_untrusted_downstream_and_upstream
+  status: alpha
+  type_urls:
+  - envoy.extensions.bootstrap.dynamic_file_metadata.v3.DynamicFileMetadata
 envoy.clusters.reverse_connection:
   categories:
   - envoy.clusters
