@@ -159,6 +159,7 @@ public:
   const absl::flat_hash_set<uint32_t>& httpDestinationPorts() const override {
     return parent_.httpDestinationPorts();
   }
+  bool rejectLocalRequestsOnOverload() const override { return true; }
 
 private:
   ConnectionManagerConfig& parent_;

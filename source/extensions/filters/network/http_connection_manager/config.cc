@@ -454,6 +454,7 @@ HttpConnectionManagerConfig::HttpConnectionManagerConfig(
       append_x_forwarded_port_(config.append_x_forwarded_port()),
       add_proxy_protocol_connection_state_(
           PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, add_proxy_protocol_connection_state, true)),
+      reject_local_requests_on_overload_(config.reject_local_requests_on_overload()),
       https_destination_ports_(
           config.has_forward_proto_config()
               ? absl::flat_hash_set<uint32_t>(

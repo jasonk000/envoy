@@ -604,6 +604,12 @@ public:
   virtual bool addProxyProtocolConnectionState() const PURE;
 
   /**
+   * @return whether HCM will accept requests even when overloaded.
+   *
+   */
+  virtual bool rejectLocalRequestsOnOverload() const PURE;
+
+  /**
    * @return a set of destination ports that should be treated as HTTPS when the
    *         local address was restored from PROXY protocol.
    */

@@ -1509,15 +1509,20 @@ void ConnectionManagerImpl::ActiveStream::decodeHeaders(RequestHeaderMapSharedPt
   } else {
     snapped_route_config_ = connection_manager_.config_->routeConfigProvider()->configCast();
   }
-
   // Drop new requests when overloaded as soon as we have decoded the headers.
   const bool drop_request_due_to_overload =
       (connection_manager_.accept_new_http_stream_ != nullptr &&
        connection_manager_.accept_new_http_stream_->shouldShedLoad()) ||
       connection_manager_.random_generator_.bernoulli(
           connection_manager_.overload_stop_accepting_requests_ref_.value());
+  const bool is_local =
+      Network::Utility::isLoopbackAddress(*connection_manager_.read_callbacks_->connection()
+                                               .connectionInfoProvider()
+                                               .directRemoteAddress());
 
-  if (drop_request_due_to_overload) {
+  if ((!is_local && drop_request_due_to_overload) ||
+      (is_local && connection_manager_.config_->rejectLocalRequestsOnOverload() &&
+       drop_request_due_to_overload)) {
     // In this one special case, do not create the filter chain. If there is a risk of memory
     // overload it is more important to avoid unnecessary allocation than to create the filters.
     filter_manager_.skipFilterChainCreation();

@@ -633,6 +633,7 @@ public:
         .WillByDefault(testing::ReturnRef(https_destination_ports_));
     ON_CALL(*this, httpDestinationPorts())
         .WillByDefault(testing::ReturnRef(http_destination_ports_));
+    ON_CALL(*this, rejectLocalRequestsOnOverload()).WillByDefault(testing::Return(true));
   }
 
   // Http::ConnectionManagerConfig
@@ -725,6 +726,7 @@ public:
   MOCK_METHOD(bool, addProxyProtocolConnectionState, (), (const));
   MOCK_METHOD((const absl::flat_hash_set<uint32_t>&), httpsDestinationPorts, (), (const));
   MOCK_METHOD((const absl::flat_hash_set<uint32_t>&), httpDestinationPorts, (), (const));
+  MOCK_METHOD(bool, rejectLocalRequestsOnOverload, (), (const));
 
   class AllowInternalAddressConfig : public Http::InternalAddressConfig {
   public:

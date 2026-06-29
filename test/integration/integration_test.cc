@@ -264,8 +264,8 @@ TEST_P(IntegrationTest, PerWorkerHCMStats) {
   IntegrationCodecClientPtr codec_client3 = makeHttpConnection(lookupPort("http_other"));
   auto response3 = codec_client3->makeHeaderOnlyRequest(default_request_headers_);
   ASSERT_TRUE(response3->waitForEndStream());
-  test_server_->waitForCounterEq("http.first_stat_prefix.worker_0.downstream_rq", 1);
-  test_server_->waitForCounterEq("http.first_stat_prefix.worker_1.downstream_rq", 1);
+  test_server_->waitForCounter("http.first_stat_prefix.worker_0.downstream_rq", testing::Eq(1));
+  test_server_->waitForCounter("http.first_stat_prefix.worker_1.downstream_rq", testing::Eq(1));
 
   codec_client_->close();
   codec_client2->close();

@@ -40,6 +40,10 @@ protected:
                   HttpConnectionManager& cm) -> void { cm.set_append_local_overload(true); });
     }
 
+    // do not accept requests when overloaded
+    config_helper_.addConfigModifier(
+        [&](envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager&
+                hcm) -> void { hcm.set_reject_local_requests_on_overload(true); });
     initialize();
     updateResource(0);
   }
@@ -50,6 +54,10 @@ protected:
     config_helper_.addConfigModifier([this](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
       *bootstrap.mutable_overload_manager() = this->overload_manager_config_;
     });
+    // do not accept requests when overloaded
+    config_helper_.addConfigModifier(
+        [&](envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager&
+                hcm) -> void { hcm.set_reject_local_requests_on_overload(true); });
     config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
       auto* listener = bootstrap.mutable_static_resources()->mutable_listeners(0);
       listener->set_bypass_overload_manager(true);
@@ -57,6 +65,20 @@ protected:
       new_listener->CopyFrom(*listener);
       new_listener->set_name("http_2");
       new_listener->set_bypass_overload_manager(false);
+    });
+    initialize();
+    updateResource(0);
+  }
+
+  void initializeWithAcceptRequestsWhenOverloaded(
+      const envoy::config::overload::v3::OverloadAction& overload_action) {
+    setupOverloadManagerConfig(overload_action);
+    config_helper_.addConfigModifier([this](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
+      *bootstrap.mutable_overload_manager() = this->overload_manager_config_;
+    });
+    config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
+      auto* listener = bootstrap.mutable_static_resources()->mutable_listeners(0);
+      listener->set_bypass_overload_manager(false);
     });
     initialize();
     updateResource(0);
@@ -175,6 +197,37 @@ TEST_P(OverloadIntegrationTest, AppendLocalOverloadHeader) {
                 .getStringView());
   EXPECT_EQ("envoy overloaded", response->body());
   codec_client_->close();
+}
+
+TEST_P(OverloadIntegrationTest, AcceptRequestsOnHcmWhenOverloaded) {
+  initializeWithAcceptRequestsWhenOverloaded(
+      TestUtility::parseYaml<envoy::config::overload::v3::OverloadAction>(R"EOF(
+      name: "envoy.overload_actions.stop_accepting_requests"
+      triggers:
+        - name: "envoy.resource_monitors.testonly.fake_resource_monitor"
+          threshold:
+            value: 0.9
+    )EOF"));
+
+  // Put envoy in overloaded state and validate that it doesn't drop new requests
+  // because we chose to bypass the overload manager on this listener.
+  updateResource(1);
+  test_server_->waitForGauge("overload.envoy.overload_actions.stop_accepting_requests.active",
+                             testing::Eq(1));
+
+  Http::TestRequestHeaderMapImpl request_headers{{":method", "GET"},
+                                                 {":path", "/test/long/url"},
+                                                 {":scheme", "http"},
+                                                 {":authority", "sni.lyft.com"}};
+
+  codec_client_ = makeHttpConnection(makeClientConnection((lookupPort("http"))));
+  auto response = sendRequestAndWaitForResponse(request_headers, 0, default_response_headers_, 0);
+
+  EXPECT_TRUE(upstream_request_->complete());
+  EXPECT_EQ(0U, upstream_request_->bodyLength());
+  EXPECT_TRUE(response->complete());
+  EXPECT_EQ("200", response->headers().getStatusValue());
+  EXPECT_EQ(0U, response->body().size());
 }
 
 TEST_P(OverloadIntegrationTest, DisableKeepaliveWhenOverloaded) {
@@ -407,7 +460,11 @@ protected:
             scaling_threshold: 0.5
             saturation_threshold: 0.9
     )EOF");
-    std::ignore = overload_action.mutable_typed_config()->PackFrom(config);
+    // do not accept requests when overloaded
+    config_helper_.addConfigModifier(
+        [&](envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager&
+                hcm) -> void { hcm.set_reject_local_requests_on_overload(true); });
+    overload_action.mutable_typed_config()->PackFrom(config);
     OverloadIntegrationTest::initializeOverloadManager(overload_action);
   }
 };
@@ -942,6 +999,9 @@ protected:
     config_helper_.addConfigModifier([this](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
       *bootstrap.mutable_overload_manager() = this->overload_manager_config_;
     });
+    config_helper_.addConfigModifier(
+        [&](envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager&
+                hcm) -> void { hcm.set_reject_local_requests_on_overload(true); });
     initialize();
     updateResource(0);
   }
@@ -951,6 +1011,9 @@ protected:
     config_helper_.addConfigModifier([this](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
       *bootstrap.mutable_overload_manager() = this->overload_manager_config_;
     });
+    config_helper_.addConfigModifier(
+        [&](envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager&
+                hcm) -> void { hcm.set_reject_local_requests_on_overload(true); });
     config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
       auto* listener = bootstrap.mutable_static_resources()->mutable_listeners(0);
       listener->set_bypass_overload_manager(true);

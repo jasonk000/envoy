@@ -253,6 +253,7 @@ public:
   bool appendLocalOverload() const override { return false; }
   bool appendXForwardedPort() const override { return false; }
   bool addProxyProtocolConnectionState() const override { return true; }
+  bool rejectLocalRequestsOnOverload() const override { return true; }
   const absl::flat_hash_set<uint32_t>& httpsDestinationPorts() const override {
     return https_destination_ports_;
   }

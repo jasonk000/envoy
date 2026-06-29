@@ -250,6 +250,7 @@ public:
   bool addProxyProtocolConnectionState() const override {
     return add_proxy_protocol_connection_state_;
   }
+  bool rejectLocalRequestsOnOverload() const override { return true; }
   const absl::flat_hash_set<uint32_t>& httpsDestinationPorts() const override {
     return https_destination_ports_;
   }
