@@ -23,6 +23,7 @@
 #include "test/mocks/event/mocks.h"
 #include "test/mocks/runtime/mocks.h"
 #include "test/mocks/stats/mocks.h"
+#include "test/mocks/upstream/admission_control.h"
 #include "test/mocks/upstream/transport_socket_match.h"
 
 #include "gmock/gmock.h"
@@ -89,7 +90,7 @@ public:
                             uint64_t conn_pool, uint64_t conn_per_host = 100) {
     resource_manager_ = std::make_unique<ResourceManagerImpl>(
         runtime_, name_, cx, rq_pending, rq, rq_retry, conn_pool, conn_per_host,
-        circuit_breakers_stats_, std::nullopt, std::nullopt, std::nullopt, dispatcher_);
+        circuit_breakers_stats_, std::nullopt, std::nullopt, std::nullopt, dispatcher_, false);
   }
 
   void resetResourceManagerWithRetryBudget(uint64_t cx, uint64_t rq_pending, uint64_t rq,
@@ -100,7 +101,13 @@ public:
     resource_manager_ = std::make_unique<ResourceManagerImpl>(
         runtime_, name_, cx, rq_pending, rq, rq_retry, conn_pool, conn_per_host,
         circuit_breakers_stats_, budget_percent, budget_interval, min_retry_concurrency,
-        dispatcher_);
+        dispatcher_, false);
+  }
+
+  // By default this is unset so the admissions control extensions should not be used unless this
+  // is called.
+  void setAdmissionControl(NiceMock<MockAdmissionControl>& admission_control) {
+    admission_control_.emplace(admission_control);
   }
 
   // Upstream::ClusterInfo
@@ -141,6 +148,7 @@ public:
   MOCK_METHOD(const std::string&, name, (), (const));
   MOCK_METHOD(const std::string&, observabilityName, (), (const));
   MOCK_METHOD(ResourceManager&, resourceManager, (ResourcePriority priority), (const));
+  MOCK_METHOD(OptRef<AdmissionControl>, admissionControl, (ResourcePriority priority), (const));
   MOCK_METHOD(TransportSocketMatcher&, transportSocketMatcher, (), (const));
   MOCK_METHOD(DeferredCreationCompatibleClusterTrafficStats&, trafficStats, (), (const));
   MOCK_METHOD(ClusterLbStats&, lbStats, (), (const));
@@ -248,6 +256,7 @@ public:
   NiceMock<Runtime::MockLoader> runtime_;
   NiceMock<Event::MockDispatcher> dispatcher_;
   std::unique_ptr<Upstream::ResourceManager> resource_manager_;
+  OptRef<NiceMock<MockAdmissionControl>> admission_control_;
   Network::Address::InstanceConstSharedPtr source_address_;
   std::shared_ptr<MockUpstreamLocalAddressSelector> upstream_local_address_selector_;
   envoy::config::cluster::v3::Cluster::DiscoveryType type_{

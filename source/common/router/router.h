@@ -573,12 +573,11 @@ private:
   Http::FilterHeadersStatus checkStrictHeaders(const Http::RequestHeaderMap& headers);
   void chargeUpstreamAbort(Http::Code code, bool dropped, UpstreamRequest& upstream_request);
   void cleanup();
-  virtual RetryStatePtr createRetryState(const RetryPolicy& policy,
-                                         Http::RequestHeaderMap& request_headers,
-                                         const Upstream::ClusterInfo& cluster,
-                                         Server::Configuration::CommonFactoryContext& context,
-                                         Event::Dispatcher& dispatcher,
-                                         Upstream::ResourcePriority priority) PURE;
+  virtual RetryStatePtr createRetryState(
+      const RetryPolicy& policy, Http::RequestHeaderMap& request_headers,
+      const Upstream::ClusterInfo& cluster, Server::Configuration::CommonFactoryContext& context,
+      Event::Dispatcher& dispatcher, Upstream::ResourcePriority priority,
+      OptRef<Upstream::AttemptStreamAdmissionController> attempt_admission_controller) PURE;
 
   GenericConnPoolPtr createConnPool(Upstream::ThreadLocalCluster& thread_local_cluster,
                                     const Upstream::HostConstSharedPtr& host);
@@ -651,6 +650,7 @@ private:
                                                    std::optional<Http::Code> failure_status);
 
   RetryStatePtr retry_state_;
+  Upstream::AttemptStreamAdmissionControllerPtr attempt_controller_{nullptr};
   const FilterConfigSharedPtr config_;
   Http::StreamDecoderFilterCallbacks* callbacks_{};
   RouteConstSharedPtr route_;
@@ -724,11 +724,11 @@ public:
 
 private:
   // Filter
-  RetryStatePtr createRetryState(const RetryPolicy& policy, Http::RequestHeaderMap& request_headers,
-                                 const Upstream::ClusterInfo& cluster,
-                                 Server::Configuration::CommonFactoryContext& context,
-                                 Event::Dispatcher& dispatcher,
-                                 Upstream::ResourcePriority priority) override;
+  RetryStatePtr createRetryState(
+      const RetryPolicy& policy, Http::RequestHeaderMap& request_headers,
+      const Upstream::ClusterInfo& cluster, Server::Configuration::CommonFactoryContext& context,
+      Event::Dispatcher& dispatcher, Upstream::ResourcePriority priority,
+      OptRef<Upstream::AttemptStreamAdmissionController> attempt_admission_controller) override;
 };
 
 } // namespace Router

@@ -89,7 +89,8 @@ public:
                       uint64_t max_requests, uint64_t max_retries, uint64_t max_connection_pools,
                       uint64_t max_connections_per_host, ClusterCircuitBreakersStats cb_stats,
                       std::optional<double> budget_percent, std::optional<uint64_t> budget_interval,
-                      std::optional<uint32_t> min_retry_concurrency, Event::Dispatcher& dispatcher)
+                      std::optional<uint32_t> min_retry_concurrency, Event::Dispatcher& dispatcher,
+                      bool attempt_extension_configured)
       : connections_(max_connections, runtime, runtime_key + "max_connections", cb_stats.cx_open_,
                      cb_stats.remaining_cx_),
         pending_requests_(max_pending_requests, runtime, runtime_key + "max_pending_requests",
@@ -102,7 +103,7 @@ public:
         retries_(budget_percent, budget_interval, min_retry_concurrency, max_retries, runtime,
                  runtime_key + "retry_budget.", runtime_key + "max_retries",
                  cb_stats.rq_retry_open_, cb_stats.remaining_retries_, requests_, pending_requests_,
-                 dispatcher) {
+                 dispatcher, attempt_extension_configured) {
     // Count active requests when retry budget is configured.
     // Pending requests are not counted to avoid counting them twice.
     if (budget_percent.has_value() || min_retry_concurrency.has_value()) {
@@ -126,9 +127,11 @@ private:
                     Runtime::Loader& runtime, const std::string& retry_budget_runtime_key,
                     const std::string& max_retries_runtime_key, Stats::Gauge& open_gauge,
                     Stats::Gauge& remaining, const ResourceLimit& requests,
-                    const ResourceLimit& pending_requests, Event::Dispatcher& dispatcher)
+                    const ResourceLimit& pending_requests, Event::Dispatcher& dispatcher,
+                    bool attempt_extension_configured)
         : runtime_(runtime),
           max_retry_resource_(max_retries, runtime, max_retries_runtime_key, open_gauge, remaining),
+          delegate_to_attempt_controller_(attempt_extension_configured),
           budget_percent_(budget_percent), budget_interval_(budget_interval),
           min_retry_concurrency_(min_retry_concurrency),
           budget_percent_key_(retry_budget_runtime_key + "budget_percent"),
@@ -155,6 +158,8 @@ private:
 
     // Envoy::ResourceLimit
     bool canCreate() override {
+      ENVOY_BUG(!delegate_to_attempt_controller_,
+                "Should only use the configured attempt controller for retries");
       if (!useRetryBudget()) {
         return max_retry_resource_.canCreate();
       }
@@ -162,14 +167,23 @@ private:
       return count() < max();
     }
     void inc() override {
+      if (delegate_to_attempt_controller_) {
+        return;
+      }
       max_retry_resource_.inc();
       clearRemainingGauge();
     }
     void dec() override {
+      if (delegate_to_attempt_controller_) {
+        return;
+      }
       max_retry_resource_.dec();
       clearRemainingGauge();
     }
     void decBy(uint64_t amount) override {
+      if (delegate_to_attempt_controller_) {
+        return;
+      }
       max_retry_resource_.decBy(amount);
       clearRemainingGauge();
     }
@@ -249,6 +263,7 @@ private:
     // The max_retry resource is nested within the budget to maintain state if the retry budget is
     // toggled.
     ManagedResourceImpl max_retry_resource_;
+    const bool delegate_to_attempt_controller_;
     const std::optional<double> budget_percent_;
     const std::optional<uint64_t> budget_interval_;
     const std::optional<uint32_t> min_retry_concurrency_;

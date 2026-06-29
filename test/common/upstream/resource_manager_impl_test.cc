@@ -33,7 +33,7 @@ TEST(ResourceManagerImplTest, RuntimeResourceManager) {
 
   ResourceManagerImpl resource_manager(
       runtime, "circuit_breakers.runtime_resource_manager_test.default.", 0, 0, 0, 1, 0, 100,
-      clusterCircuitBreakersStats(store), std::nullopt, std::nullopt, std::nullopt, dispatcher);
+      clusterCircuitBreakersStats(store), std::nullopt, std::nullopt, std::nullopt, dispatcher, false);
 
   EXPECT_CALL(
       runtime.snapshot_,
@@ -96,7 +96,7 @@ TEST(ResourceManagerImplTest, RemainingResourceGauges) {
   auto stats = clusterCircuitBreakersStats(store);
   ResourceManagerImpl resource_manager(
       runtime, "circuit_breakers.runtime_resource_manager_test.default.", 1, 2, 1, 0, 3, 100, stats,
-      std::nullopt, std::nullopt, std::nullopt, dispatcher);
+      std::nullopt, std::nullopt, std::nullopt, dispatcher, false);
 
   // Test remaining_cx_ gauge
   EXPECT_EQ(1U, resource_manager.connections().max());
@@ -164,7 +164,7 @@ TEST(ResourceManagerImplTest, RetryBudgetOverrideGauge) {
   // Test retry budgets disable remaining_retries gauge (it should always be 0).
   ResourceManagerImpl rm(runtime, "circuit_breakers.runtime_resource_manager_test.default.", 1, 2,
                          1, 0, 3, 100, stats, 20.0, static_cast<uint64_t>(100),
-                         static_cast<uint32_t>(5), dispatcher);
+                         static_cast<uint32_t>(5), dispatcher, false);
 
   EXPECT_EQ(5U, rm.retries().max());
   EXPECT_EQ(0U, stats.remaining_retries_.value());
@@ -186,7 +186,7 @@ TEST(ResourceManagerImplTest, RetryBudgetIntervalDisabled) {
   // budget_interval=0 means use in-flight request count, no sliding window.
   ResourceManagerImpl rm(runtime, "circuit_breakers.runtime_resource_manager_test.default.", 1024,
                          0, 1024, 0, 3, 100, stats, 20.0, static_cast<uint64_t>(0),
-                         static_cast<uint32_t>(5), dispatcher);
+                         static_cast<uint32_t>(5), dispatcher, false);
 
   // Expect max retries to be the min_retry_concurrency.
   EXPECT_EQ(5U, rm.retries().max());
@@ -230,6 +230,36 @@ TEST(ResourceManagerImplTest, RetryBudgetIntervalDisabled) {
   EXPECT_FALSE(rm.retries().canCreate());
 }
 
+
+TEST(ResourceManagerImplTest, AttemptBudgetOverridesRetryBudget) {
+  NiceMock<Runtime::MockLoader> runtime;
+  Stats::IsolatedStoreImpl store;
+  NiceMock<Event::MockDispatcher> dispatcher;
+
+  auto stats = clusterCircuitBreakersStats(store);
+
+  // Test retry budgets disable remaining_retries gauge (it should always be 0).
+  ResourceManagerImpl rm(runtime, "circuit_breakers.runtime_resource_manager_test.default.", 1, 2,
+                         1, 0, 3, 100, stats, 20.0, static_cast<uint64_t>(5),
+                         std::nullopt, dispatcher, true);
+  EXPECT_EQ(0U, stats.remaining_retries_.value());
+  EXPECT_EQ(0U, rm.retries().count());
+
+  rm.retries().inc();
+
+  EXPECT_EQ(0U, rm.retries().count());
+  EXPECT_EQ(0U, stats.remaining_retries_.value());
+
+  rm.retries().dec();
+
+  EXPECT_EQ(0U, rm.retries().count());
+  EXPECT_EQ(0U, stats.remaining_retries_.value());
+
+  rm.retries().decBy(10);
+  EXPECT_EQ(0U, rm.retries().count());
+  EXPECT_EQ(0U, stats.remaining_retries_.value());
+}
+
 TEST(ResourceManagerImplTest, RetryBudgetIntervalEnabled) {
   NiceMock<Runtime::MockLoader> runtime;
   Stats::IsolatedStoreImpl store;
@@ -243,7 +273,7 @@ TEST(ResourceManagerImplTest, RetryBudgetIntervalEnabled) {
       .Times(testing::AnyNumber());
   ResourceManagerImpl rm(runtime, "circuit_breakers.runtime_resource_manager_test.default.", 1024,
                          0, 1024, 0, 3, 100, stats, 20.0, static_cast<uint64_t>(100),
-                         static_cast<uint32_t>(5), dispatcher);
+                         static_cast<uint32_t>(5), dispatcher, false);
 
   EXPECT_EQ(5U, rm.retries().max());
   for (int i = 0; i < 100; i++) {
@@ -293,6 +323,7 @@ TEST(ResourceManagerImplTest, RetryBudgetIntervalEnabled) {
   }
   EXPECT_FALSE(rm.retries().canCreate());
 }
+
 } // namespace
 } // namespace Upstream
 } // namespace Envoy

@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package envoy.extensions.attempt.concurrency_budget.v3;
+
+import "envoy/config/cluster/v3/circuit_breaker.proto";
+
+import "google/protobuf/wrappers.proto";
+
+import "udpa/annotations/status.proto";
+
+option java_package = "io.envoyproxy.envoy.extensions.attempt.concurrency_budget.v3";
+option java_outer_classname = "ConcurrencyBudgetConfigProto";
+option java_multiple_files = true;
+option go_package =
+"github.com/envoyproxy/go-control-plane/envoy/extensions/attempt/concurrency_budget/v3;concurrency_budgetv3";
+option (udpa.annotations.file_status).package_version_status = ACTIVE;
+
+// [#protodoc-title: An Attempt Controller for RetryBudgets ]
+
+// The concurrency budget attempt admission controller allows for limiting the number of concurrent
+// retries that can be in flight at any given time to the same upstream cluster.
+// This is useful for preventing a single upstream cluster from being overloaded with retries.
+//
+// This is the same policy as the existing
+// :ref:`RetryBudget<envoy_v3_api_msg_config.cluster.v3.CircuitBreakers.RetryBudget>` but as
+// an extension.
+//
+// The concurrency budget limits the number of concurrent retries as a percentage of the total
+// number of active tries (retries or otherwise) to the cluster at the time the retry enters backoff.
+//
+// Retries are counted as active as soon as they enter backoff,
+// until they are either successful (response streaming starts) or aborted.
+//
+// Tries meanwhile include both the initial try, and all retries. The initial try is counted as
+// active as soon as it is dispatched, and remains active until the upstream stream is ended.
+//
+// This extension will not throttle the initial attempt.
+//
+// [#extension: envoy.attempt_admission_control.concurrency_budget]
+message ConcurrencyBudgetConfig {
+    config.cluster.v3.CircuitBreakers.Thresholds.RetryBudget retry_budget = 1;
+}

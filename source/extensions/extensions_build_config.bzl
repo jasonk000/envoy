@@ -390,6 +390,11 @@ EXTENSIONS = {
     "envoy.retry_priorities.previous_priorities":       "//source/extensions/retry/priority/previous_priorities:config",
 
     #
+    # Attempt plugins
+    #
+    "envoy.attempt.concurrency_budget": "//source/extensions/attempt/concurrency_budget:config",
+
+    #
     # CacheFilter plugins
     #
     "envoy.extensions.http.cache.file_system_http_cache":    "//source/extensions/http/cache/file_system_http_cache:config",
