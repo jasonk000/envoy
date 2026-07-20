@@ -208,6 +208,7 @@ public:
   const Upstream::HostConstSharedPtr& host() const { return host_; }
   // Called if this pool is likely to be picked soon, to determine if it's worth preconnecting.
   bool maybePreconnectImpl(float global_preconnect_ratio);
+  void refillEagerPreconnectFloor();
 
   // Closes and destroys all connections. This must be called in the destructor of
   // derived classes because the derived ActiveClient will downcast parent_ to a more
@@ -398,6 +399,17 @@ private:
   PendingStreamPtr popPendingStream();
   PendingStreamPtr removePendingStream(PendingStream& stream);
 
+  // The configured eager preconnect floor for this pool's host, or 0 when the
+  // envoy.reloadable_features.eager_preconnect_floor runtime guard is disabled.
+  uint32_t effectiveEagerPreconnectFloor() const;
+
+  // Connections that count toward the eager preconnect floor: established (ready/busy) plus
+  // in-flight (connecting). Excludes early-data (0-RTT) clients, matching the floor accounting in
+  // shouldCreateNewConnection().
+  size_t openOrOpeningConnections() const {
+    return ready_clients_.size() + busy_clients_.size() + connecting_clients_.size();
+  }
+
   Upstream::ClusterConnectivityState& cluster_connectivity_state_;
 
   // Owns every stream represented in pending_stream_queue_.
@@ -416,6 +428,9 @@ private:
   // Whether the connection pool is currently in the process of closing
   // all connections so that it can be gracefully deleted.
   bool is_draining_for_deletion_{false};
+
+  // Whether all connections are being actively destroyed, so we do not create new ones.
+  bool is_destroying_all_connections_{false};
 
   // True iff this object is in the deferred delete list.
   bool deferred_deleting_{false};

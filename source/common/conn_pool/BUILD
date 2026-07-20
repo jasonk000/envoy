@@ -33,5 +33,6 @@ envoy_cc_library(
         "//source/common/queue_policy:queue_policy_base_lib",
         "//source/common/stats:timespan_lib",
         "//source/common/upstream:upstream_lib",
+        "@abseil-cpp//absl/cleanup",
     ],
 )

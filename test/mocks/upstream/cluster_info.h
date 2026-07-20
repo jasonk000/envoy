@@ -122,6 +122,10 @@ public:
   MOCK_METHOD(float, perUpstreamPreconnectRatio, (), (const));
   MOCK_METHOD(float, peekaheadRatio, (), (const));
   MOCK_METHOD(bool, shouldPreconnect, (const Host& host), (const));
+  MOCK_METHOD(uint32_t, eagerPreconnectFloor, (), (const));
+  MOCK_METHOD(bool, connectionAwareLoadBalancingEnabled, (), (const));
+  MOCK_METHOD(uint32_t, connectionAwareLbHostSelectionRetryMaxAttempts, (), (const));
+  MOCK_METHOD(uint32_t, eagerPreconnectFloorFailureThreshold, (), (const));
   MOCK_METHOD(uint32_t, perConnectionBufferLimitBytes, (), (const));
   MOCK_METHOD(std::chrono::milliseconds, perConnectionBufferHighWatermarkTimeout, (), (const));
   MOCK_METHOD(uint64_t, features, (), (const));

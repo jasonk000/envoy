@@ -1341,6 +1341,17 @@ ClusterInfoImpl::ClusterInfoImpl(
                     config.preconnect_policy().preconnect_enabled_metadata(),
                     factory_context.serverFactoryContext())
               : nullptr),
+      eager_preconnect_floor_(
+          PROTOBUF_GET_WRAPPED_OR_DEFAULT(config.preconnect_policy(), eager_preconnect_floor, 0)),
+      // Netflix interface: nflx_connection_aware_load_balancing.enabled toggles connection-aware LB.
+      connection_aware_load_balancing_enabled_(
+          config.has_nflx_connection_aware_load_balancing() &&
+          config.nflx_connection_aware_load_balancing().enabled()),
+      // The retry budget is not exposed through the Netflix interface; it uses the upstream
+      // default of 2.
+      connection_aware_lb_host_selection_retry_max_attempts_(2),
+      eager_preconnect_floor_failure_threshold_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(
+          config.preconnect_policy(), eager_preconnect_floor_failure_threshold, 3)),
       socket_matcher_(std::move(socket_matcher)), stats_scope_(std::move(stats_scope)),
       traffic_stats_(generateStats(
           stats_scope_, factory_context.serverFactoryContext().clusterManager().clusterStatNames(),
@@ -1472,6 +1483,18 @@ ClusterInfoImpl::ClusterInfoImpl(
         config.queuing_policies().pending_rq_policy(), *stats_scope_, server_context);
     SET_AND_RETURN_IF_NOT_OK(policy_or_error.status(), creation_status);
     pending_rq_queue_policy_ = std::move(*policy_or_error);
+  }
+
+  // eager_preconnect_floor warms and refills a set of upstream connections per host, and
+  // connection-aware load balancing inspects/primes connections across requests. Neither is
+  // compatible with connection_pool_per_downstream_connection, where each pool is bound to a
+  // single downstream connection and torn down when it closes.
+  if (connection_pool_per_downstream_connection_ &&
+      (eager_preconnect_floor_ > 0 || connection_aware_load_balancing_enabled_)) {
+    creation_status = absl::InvalidArgumentError(
+        "eager_preconnect_floor and nflx_connection_aware_load_balancing are incompatible with "
+        "connection_pool_per_downstream_connection");
+    return;
   }
 
   if (config.has_load_balancing_policy() ||
