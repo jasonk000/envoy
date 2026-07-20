@@ -645,6 +645,20 @@ absl::Status InstanceBase::initializeOrThrow(Network::Address::InstanceConstShar
     }
   }
 
+  // Netflix: advertise support for the per-host preconnect eligibility feature
+  // (Cluster.PreconnectPolicy.nflx_preconnect_enabled_metadata). It is a core field rather than a
+  // registered extension factory, so the loop above does not cover it; advertise it explicitly
+  // here so the management server can gate configuration on this capability.
+  {
+    auto* nflx_extension = bootstrap_.mutable_node()->add_extensions();
+    nflx_extension->set_name("netflix.preconnect.per_host_eligibility");
+    nflx_extension->set_category("netflix.preconnect_policies");
+    auto* nflx_version = nflx_extension->mutable_version()->mutable_version();
+    nflx_version->set_major_number(0);
+    nflx_version->set_minor_number(0);
+    nflx_version->set_patch(1);
+  }
+
   local_info_ = std::make_unique<LocalInfo::LocalInfoImpl>(
       stats().symbolTable(), bootstrap_.node(), bootstrap_.node_context_params(), local_address,
       options_.serviceZone(), options_.serviceClusterName(), options_.serviceNodeName());

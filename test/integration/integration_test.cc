@@ -2597,7 +2597,7 @@ static void addPreconnectEligibilityMatcher(envoy::config::bootstrap::v3::Bootst
   auto* preconnect =
       bootstrap.mutable_static_resources()->mutable_clusters(0)->mutable_preconnect_policy();
   preconnect->mutable_per_upstream_preconnect_ratio()->set_value(2.0);
-  auto* matcher = preconnect->mutable_preconnect_enabled_metadata();
+  auto* matcher = preconnect->mutable_nflx_preconnect_enabled_metadata();
   matcher->set_filter("test.preconnect");
   matcher->add_path()->set_key("eligible");
   matcher->mutable_value()->set_bool_match(true);
@@ -2663,7 +2663,7 @@ TEST_P(IntegrationTest, PreconnectSkipNotCountedWithoutRatio) {
     auto* matcher = bootstrap.mutable_static_resources()
                         ->mutable_clusters(0)
                         ->mutable_preconnect_policy()
-                        ->mutable_preconnect_enabled_metadata();
+                        ->mutable_nflx_preconnect_enabled_metadata();
     matcher->set_filter("test.preconnect");
     matcher->add_path()->set_key("eligible");
     matcher->mutable_value()->set_bool_match(true);

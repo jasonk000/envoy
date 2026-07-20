@@ -1345,7 +1345,7 @@ TEST_F(ClusterManagerImplTest, ShouldPreconnectHonorsEligibilityMatcher) {
       lb_policy: ROUND_ROBIN
       type: STATIC
       preconnect_policy:
-        preconnect_enabled_metadata:
+        nflx_preconnect_enabled_metadata:
           filter: test.preconnect
           path:
           - key: eligible

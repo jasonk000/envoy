@@ -1,5 +1,5 @@
-Added the eager preconnect floor. When :ref:`eager_preconnect_floor
-<envoy_v3_api_field_config.cluster.v3.Cluster.PreconnectPolicy.eager_preconnect_floor>` is set on a
+Added the eager preconnect floor. When :ref:`nflx_per_upstream_min_connections
+<envoy_v3_api_field_config.cluster.v3.Cluster.PreconnectPolicy.nflx_per_upstream_min_connections>` is set on a
 cluster, Envoy proactively opens a connection to each healthy upstream host regardless of request
 load, and the connection pool then grows to and maintains at least that many connections, so
 request-path latency does not pay for connection establishment. The feature is guarded by

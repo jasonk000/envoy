@@ -30,7 +30,7 @@ protected:
     config_helper_.addConfigModifier(
         [min_connections](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
           auto* cluster = bootstrap.mutable_static_resources()->mutable_clusters(0);
-          cluster->mutable_preconnect_policy()->mutable_eager_preconnect_floor()->set_value(
+          cluster->mutable_preconnect_policy()->mutable_nflx_per_upstream_min_connections()->set_value(
               min_connections);
         });
   }
@@ -296,7 +296,7 @@ protected:
       auto* eds = cluster->mutable_eds_cluster_config();
       eds->mutable_eds_config()->set_resource_api_version(envoy::config::core::v3::ApiVersion::V3);
       eds->mutable_eds_config()->mutable_path_config_source()->set_path(eds_helper_.edsPath());
-      cluster->mutable_preconnect_policy()->mutable_eager_preconnect_floor()->set_value(
+      cluster->mutable_preconnect_policy()->mutable_nflx_per_upstream_min_connections()->set_value(
           min_connections);
       if (max_connections.has_value()) {
         auto* threshold = cluster->mutable_circuit_breakers()->add_thresholds();
@@ -678,7 +678,7 @@ protected:
     auto* eds = cluster_.mutable_eds_cluster_config();
     eds->mutable_eds_config()->set_resource_api_version(envoy::config::core::v3::ApiVersion::V3);
     eds->mutable_eds_config()->mutable_path_config_source()->set_path(eds_helper_.edsPath());
-    cluster_.mutable_preconnect_policy()->mutable_eager_preconnect_floor()->set_value(
+    cluster_.mutable_preconnect_policy()->mutable_nflx_per_upstream_min_connections()->set_value(
         min_connections);
     envoy::config::endpoint::v3::ClusterLoadAssignment empty;
     empty.set_cluster_name("cluster_0");

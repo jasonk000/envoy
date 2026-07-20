@@ -25,7 +25,8 @@ protected:
     config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
       bootstrap.mutable_static_resources()
           ->mutable_clusters(0)
-          ->mutable_connection_aware_load_balancing();
+          ->mutable_nflx_connection_aware_load_balancing()
+          ->set_enabled(true);
     });
   }
 
@@ -34,7 +35,7 @@ protected:
       bootstrap.mutable_static_resources()
           ->mutable_clusters(0)
           ->mutable_preconnect_policy()
-          ->mutable_eager_preconnect_floor()
+          ->mutable_nflx_per_upstream_min_connections()
           ->set_value(floor);
     });
   }

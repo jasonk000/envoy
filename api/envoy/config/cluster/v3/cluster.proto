@@ -48,7 +48,7 @@ message ClusterCollection {
 }
 
 // Configuration for a single upstream cluster.
-// [#next-free-field: 63]
+// [#next-free-field: 101]
 message Cluster {
   option (udpa.annotations.versioning).previous_message_type = "envoy.api.v2.Cluster";
 
@@ -756,28 +756,47 @@ message Cluster {
     google.protobuf.DoubleValue predictive_preconnect_ratio = 2
         [(validate.rules).double = {lte: 3.0 gte: 1.0}];
 
-    // Restricts anticipatory connections to hosts whose endpoint metadata matches this matcher.
-    // Non-matching hosts are never preconnected, and instead get connections only on demand, as they
-    // serve real requests. If unset, all healthy hosts are eligible.
-    type.matcher.v3.MetadataMatcher preconnect_enabled_metadata = 3;
+    // Restricts anticipatory (preconnect) connections to hosts whose endpoint metadata matches
+    // this matcher. Non-matching hosts are never preconnected and instead receive connections
+    // only on demand, as they serve real requests. When unset, all healthy hosts are eligible.
+    type.matcher.v3.MetadataMatcher nflx_preconnect_enabled_metadata = 98;
 
-    // Minimum number of connections to maintain per healthy upstream host. When non-zero,
-    // Envoy proactively opens new connections and refills closed ones so that the floor of connections
-    // exists regardless of requests.
-    google.protobuf.UInt32Value eager_preconnect_floor = 4;
-
-    // Number of consecutive connection failures to a host, after which floor maintenance for that
-    // host is paused. The pause clears as soon as one connection establishes, typically driven by
-    // on-demand request traffic. Only used when ``eager_preconnect_floor`` is set.
-    // Defaults to 3.
-    google.protobuf.UInt32Value eager_preconnect_floor_failure_threshold = 5
-        [(validate.rules).uint32 = {gte: 1}];
+    // Minimum number of connections to maintain per upstream host. When non-zero, Envoy will
+    // proactively establish connections to each healthy host so that at least this many open
+    // (or opening) connections exist at all times — without waiting for a request to arrive.
+    //
+    // This eliminates the connection-establishment latency on the request path that exists
+    // in the default lazy model. It is particularly beneficial for latency-sensitive gRPC
+    // services where a TCP + TLS handshake on first request is unacceptable, and for clusters
+    // where connections cycle frequently (max-connection-duration, GOAWAY, idle timeout) —
+    // each connection close evaluates the floor and re-primes if the host drops below the
+    // configured minimum.
+    //
+    // When unset or zero (default), no minimum is enforced and only the ratio-based
+    // preconnect settings above apply.
+    //
+    // The failure threshold that pauses floor maintenance for a repeatedly failing host is not
+    // configurable through this interface and uses the default of 3.
+    google.protobuf.UInt32Value nflx_per_upstream_min_connections = 99;
   }
 
   // Configuration for connection-aware load balancing. When this field is set, host selection
   // prefers hosts that already have at least one established upstream connection on
-  // the current worker thread. Most useful in combination with
-  // ``preconnect_policy.eager_preconnect_floor``, which proactively opens connections.
+  // the current worker thread, falling back to the underlying load balancer's choice
+  // if no ready host is found within a small number of re-pick attempts.
+  //
+  // Most useful in combination with ``preconnect_policy.nflx_per_upstream_min_connections``
+  // (which proactively opens connections) — connection-aware LB then ensures requests
+  // route preferentially to hosts whose connections are actually READY, closing the
+  // brief race window during which a host may have been chosen but its preconnected
+  // connection is still mid-handshake.
+  //
+  // Note: only meaningful for non-consistent-hash load balancing policies (e.g.
+  // ROUND_ROBIN, LEAST_REQUEST, RANDOM). For consistent-hash policies (RING_HASH,
+  // MAGLEV) re-picks would violate hash affinity, so this setting has no effect.
+  //
+  // The host-selection retry budget is not configurable through this interface and uses the
+  // default of 2.
   message NflxConnectionAwareLoadBalancing {
     // Whether connection-aware load balancing is enabled.
     bool enabled = 1;

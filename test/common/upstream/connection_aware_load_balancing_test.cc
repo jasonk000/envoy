@@ -44,7 +44,7 @@ protected:
               address: { socket_address: { address: 127.0.0.1, port_value: 11004 } }
 )EOF";
     if (!connection_aware.empty()) {
-      yaml += "      connection_aware_load_balancing: " + connection_aware + "\n";
+      yaml += "      nflx_connection_aware_load_balancing: { enabled: true }\n";
     }
     if (!preconnect.empty()) {
       yaml += "      preconnect_policy: " + preconnect + "\n";
@@ -149,12 +149,6 @@ TEST_F(ConnectionAwareLbTest, Enabled) {
   EXPECT_EQ(2U, cluster().info()->connectionAwareLbHostSelectionRetryMaxAttempts());
 }
 
-TEST_F(ConnectionAwareLbTest, RetryAttemptsConfigurable) {
-  create(parseBootstrapFromV3Yaml(fourHostConfig("{ host_selection_retry_max_attempts: 5 }")));
-  EXPECT_TRUE(cluster().info()->connectionAwareLoadBalancingEnabled());
-  EXPECT_EQ(5U, cluster().info()->connectionAwareLbHostSelectionRetryMaxAttempts());
-}
-
 // -----------------------------------------------------------------------------
 // Selection behavior
 // -----------------------------------------------------------------------------
@@ -210,7 +204,8 @@ TEST_F(ConnectionAwareLbTest, PrefersWarmOverCold) {
 TEST_F(ConnectionAwareLbTest, PrefersWarmOverColdWithFloor) {
   stubPools([](const std::string& addr) { return addr != kColdHost; });
   create(parseBootstrapFromV3Yaml(
-      fourHostConfig(/*connection_aware=*/"{}", /*preconnect=*/"{ eager_preconnect_floor: 2 }")));
+      fourHostConfig(/*connection_aware=*/"{}",
+                     /*preconnect=*/"{ nflx_per_upstream_min_connections: 2 }")));
   prewarmExcept(kColdHost);
 
   constexpr int kRequests = 8;
@@ -225,24 +220,6 @@ TEST_F(ConnectionAwareLbTest, PrefersWarmOverColdWithFloor) {
   EXPECT_EQ(0U, coldSelected());
   EXPECT_EQ(1U, pooled_hosts_.count(kColdHost))
       << "with the eager preconnect floor a rejected cold host is primed";
-}
-
-TEST_F(ConnectionAwareLbTest, RetryBudgetZeroDisablesRepick) {
-  stubPools([](const std::string& addr) { return addr != kColdHost; });
-  create(parseBootstrapFromV3Yaml(fourHostConfig("{ host_selection_retry_max_attempts: 0 }")));
-  prewarmExcept(kColdHost);
-
-  bool served_cold = false;
-  constexpr int kRequests = 8;
-  for (int i = 0; i < kRequests; ++i) {
-    auto host = cluster().chooseHost(nullptr).host;
-    ASSERT_NE(nullptr, host);
-    served_cold |= host->address()->asString() == kColdHost;
-  }
-
-  EXPECT_TRUE(served_cold) << "with no retries the cold host is served on its round-robin turn";
-  EXPECT_GT(coldSelected(), 0U);
-  EXPECT_EQ(kRequests, warmSelected() + coldSelected());
 }
 
 TEST_F(ConnectionAwareLbTest, AllHostsWarmTcp) {

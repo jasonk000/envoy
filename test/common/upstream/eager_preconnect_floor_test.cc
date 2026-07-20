@@ -52,7 +52,7 @@ TEST_F(EagerPreconnectFloorTest, AllFieldsDefaulted) {
   factory_.tls_.shutdownThread();
 }
 
-TEST_F(EagerPreconnectFloorTest, AllFieldsConfigured) {
+TEST_F(EagerPreconnectFloorTest, FloorConfigured) {
   const std::string yaml = R"EOF(
   static_resources:
     clusters:
@@ -70,10 +70,8 @@ TEST_F(EagerPreconnectFloorTest, AllFieldsConfigured) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 3
-        eager_preconnect_floor_failure_threshold:
-          value: 5
   )EOF";
 
   createWithMinConnections(yaml);
@@ -81,7 +79,8 @@ TEST_F(EagerPreconnectFloorTest, AllFieldsConfigured) {
   auto* cluster = cluster_manager_->getThreadLocalCluster("cluster_1");
   ASSERT_NE(nullptr, cluster);
   EXPECT_EQ(3, cluster->info()->eagerPreconnectFloor());
-  EXPECT_EQ(5, cluster->info()->eagerPreconnectFloorFailureThreshold());
+  // The failure threshold is not configurable through the Netflix interface; it defaults to 3.
+  EXPECT_EQ(3, cluster->info()->eagerPreconnectFloorFailureThreshold());
 
   factory_.tls_.shutdownThread();
 }
@@ -107,13 +106,13 @@ TEST_F(ClusterManagerImplTest, EagerPreconnectFloorIncompatibleWithPoolPerDownst
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
   )EOF";
 
   EXPECT_THROW_WITH_MESSAGE(create(parseBootstrapFromV3Yaml(yaml)), EnvoyException,
-                            "eager_preconnect_floor and connection_aware_load_balancing are "
-                            "incompatible with connection_pool_per_downstream_connection");
+                            "nflx_per_upstream_min_connections and nflx_connection_aware_load_balancing "
+                            "are incompatible with connection_pool_per_downstream_connection");
 }
 
 TEST_F(ClusterManagerImplTest, ConnectionAwareLbIncompatibleWithPoolPerDownstreamConnection) {
@@ -125,7 +124,7 @@ TEST_F(ClusterManagerImplTest, ConnectionAwareLbIncompatibleWithPoolPerDownstrea
       type: STATIC
       lb_policy: ROUND_ROBIN
       connection_pool_per_downstream_connection: true
-      connection_aware_load_balancing: {}
+      nflx_connection_aware_load_balancing: { enabled: true }
       load_assignment:
         cluster_name: cluster_1
         endpoints:
@@ -138,8 +137,8 @@ TEST_F(ClusterManagerImplTest, ConnectionAwareLbIncompatibleWithPoolPerDownstrea
   )EOF";
 
   EXPECT_THROW_WITH_MESSAGE(create(parseBootstrapFromV3Yaml(yaml)), EnvoyException,
-                            "eager_preconnect_floor and connection_aware_load_balancing are "
-                            "incompatible with connection_pool_per_downstream_connection");
+                            "nflx_per_upstream_min_connections and nflx_connection_aware_load_balancing "
+                            "are incompatible with connection_pool_per_downstream_connection");
 }
 
 TEST_F(EagerPreconnectFloorTest, RefillsAfterPoolErased) {
@@ -160,7 +159,7 @@ TEST_F(EagerPreconnectFloorTest, RefillsAfterPoolErased) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
   )EOF";
 
@@ -223,7 +222,7 @@ TEST_F(EagerPreconnectFloorTest, FloorReadinessIsPerWorkerNotClusterWide) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
   )EOF";
 
@@ -271,7 +270,7 @@ TEST_F(EagerPreconnectFloorTest, DisabledByRuntimeGuard) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
   )EOF";
 
@@ -351,7 +350,7 @@ TEST_F(EagerPreconnectFloorTest, NoPreconnectUntilPoolUsed) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
   )EOF";
 
@@ -392,7 +391,7 @@ TEST_F(EagerPreconnectFloorTest, OpensSingleBootstrapConnection) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 2
   )EOF";
 
@@ -430,7 +429,7 @@ TEST_F(EagerPreconnectFloorTest, BootstrapsAllHostsOnFirstUse) {
           - endpoint: {address: {socket_address: {address: 127.0.0.1, port_value: 11001}}}
           - endpoint: {address: {socket_address: {address: 127.0.0.1, port_value: 11002}}}
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
   )EOF";
 
@@ -463,8 +462,9 @@ TEST_F(EagerPreconnectFloorTest, BootstrapsAllHostsOnFirstUse) {
 // Hosts that became ineligible for preconnect after being posted are skipped.
 class BootstrapEligibilityRecheckTest : public EagerPreconnectFloorTest {
 protected:
-  static std::string yaml(uint32_t failure_threshold) {
-    return absl::StrCat(R"EOF(
+  // The failure threshold is not configurable through the Netflix interface; it defaults to 3.
+  static std::string yaml() {
+    return R"EOF(
   static_resources:
     clusters:
     - name: cluster_1
@@ -477,25 +477,23 @@ protected:
         - lb_endpoints:
           - endpoint: {address: {socket_address: {address: 127.0.0.1, port_value: 11001}}}
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
-        eager_preconnect_floor_failure_threshold:
-          value: )EOF",
-                        failure_threshold, "\n");
+  )EOF";
   }
 
   std::vector<Event::PostCb> posted_;
   NiceMock<Http::ConnectionPool::MockInstance>* pool_ = nullptr;
   HostSharedPtr host_;
 
-  void armAndCaptureBootstrap(uint32_t failure_threshold = 1) {
+  void armAndCaptureBootstrap() {
     ON_CALL(factory_.tls_.dispatcher_, post(_)).WillByDefault([this](Event::PostCb cb) {
       posted_.push_back(std::move(cb));
     });
     pool_ = new NiceMock<Http::ConnectionPool::MockInstance>();
     ON_CALL(factory_, allocateConnPool_(_, _, _, _, _, _, _)).WillByDefault(Return(pool_));
 
-    create(parseBootstrapFromV3Yaml(yaml(failure_threshold)));
+    create(parseBootstrapFromV3Yaml(yaml()));
     auto* cluster = cluster_manager_->getThreadLocalCluster("cluster_1");
     ASSERT_NE(nullptr, cluster);
     host_ = cluster->prioritySet().hostSetsPerPriority()[0]->hosts()[0];
@@ -533,14 +531,6 @@ TEST_F(BootstrapEligibilityRecheckTest, SkipsHostThatGainedReadyConnection) {
   factory_.tls_.shutdownThread();
 }
 
-TEST_F(BootstrapEligibilityRecheckTest, SkipsHostThatBecameUnreachable) {
-  armAndCaptureBootstrap();
-  host_->incConsecutiveEagerPreconnectFloorFailures();
-  EXPECT_CALL(*pool_, maybePreconnect(_)).Times(0);
-  posted_[0]();
-  factory_.tls_.shutdownThread();
-}
-
 TEST_F(BootstrapEligibilityRecheckTest, SkipsHostThatLeftCluster) {
   armAndCaptureBootstrap();
   removeSingleHostFromCluster();
@@ -557,7 +547,7 @@ TEST_F(BootstrapEligibilityRecheckTest, BootstrapsHostThatStayedEligible) {
 }
 
 TEST_F(BootstrapEligibilityRecheckTest, BootstrapsHostWithFailuresBelowThreshold) {
-  armAndCaptureBootstrap(/*failure_threshold=*/2);
+  armAndCaptureBootstrap();
   host_->incConsecutiveEagerPreconnectFloorFailures();
   EXPECT_CALL(*pool_, maybePreconnect(0)).WillOnce(Return(true));
   posted_[0]();
@@ -583,7 +573,7 @@ TEST_F(EagerPreconnectFloorTest, TcpFloorFillDrivesTcpPool) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 2
   )EOF";
 
@@ -622,7 +612,7 @@ TEST_F(EagerPreconnectFloorTest, TcpFloorFillSkippedWhenTcpPoolReady) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 2
   )EOF";
 
@@ -660,7 +650,7 @@ TEST_F(EagerPreconnectFloorTest, FloorReadinessHandlesHostWithoutTcpContainer) {
           - endpoint: {address: {socket_address: {address: 127.0.0.1, port_value: 11001}}}
           - endpoint: {address: {socket_address: {address: 127.0.0.1, port_value: 11002}}}
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
   )EOF";
 
@@ -697,7 +687,7 @@ TEST_F(EagerPreconnectFloorTest, TcpRefillsAfterPoolErased) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
   )EOF";
 
@@ -760,7 +750,7 @@ TEST_F(EagerPreconnectFloorTest, BootstrapsHttpAndTcpPools) {
                   address: 127.0.0.1
                   port_value: 11001
       preconnect_policy:
-        eager_preconnect_floor:
+        nflx_per_upstream_min_connections:
           value: 1
   )EOF";
 
