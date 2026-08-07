@@ -80,6 +80,7 @@ envoy_cc_test_library(
 rust_test(
     name = "rust_sdk_test",
     crate = "//source/extensions/dynamic_modules/sdk/rust:envoy_proxy_dynamic_modules_rust_sdk",
+    env = {"RUST_TEST_THREADS": "1"},
     tags = [
         # It is a known issue that TSAN detectes a false positive in the test runner of Rust toolchain:
         # https://github.com/rust-lang/rust/issues/39608
