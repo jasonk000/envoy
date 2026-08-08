@@ -19,8 +19,9 @@ public:
 
       thresholds->mutable_attempt_admission_control()->set_name(
           "envoy.attempt_admission_control.test");
-      thresholds->mutable_attempt_admission_control()->mutable_typed_config()->PackFrom(
-          attempt_config_);
+      std::ignore =
+          thresholds->mutable_attempt_admission_control()->mutable_typed_config()->PackFrom(
+              attempt_config_);
     });
 
     HttpProtocolIntegrationTest::initialize();

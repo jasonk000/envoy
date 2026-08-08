@@ -1847,6 +1847,13 @@ void ClusterManagerImpl::ThreadLocalClusterManagerImpl::ClusterEntry::updateHost
         cluster_info_->name());
     lb_ = lb_factory_->create({priority_set_, parent_.local_priority_set_});
   }
+
+  // Proactively establish connections to newly added hosts, matching the per-priority update path.
+  for (const auto& update : updates) {
+    for (const auto& host : update.get().hosts_added_) {
+      maybeBootstrapPreconnectFloorForHost(host);
+    }
+  }
 }
 
 void ClusterManagerImpl::ThreadLocalClusterManagerImpl::ClusterEntry::drainConnPools(

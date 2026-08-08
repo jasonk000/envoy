@@ -464,7 +464,7 @@ protected:
     config_helper_.addConfigModifier(
         [&](envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager&
                 hcm) -> void { hcm.set_reject_local_requests_on_overload(true); });
-    overload_action.mutable_typed_config()->PackFrom(config);
+    std::ignore = overload_action.mutable_typed_config()->PackFrom(config);
     OverloadIntegrationTest::initializeOverloadManager(overload_action);
   }
 };
