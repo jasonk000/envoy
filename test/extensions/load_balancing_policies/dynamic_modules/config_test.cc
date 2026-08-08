@@ -986,7 +986,8 @@ TEST_F(DynamicModulesLoadBalancerTest, HostHealthByAddressNullInputs) {
   EXPECT_FALSE(
       envoy_dynamic_module_callback_lb_get_host_health_by_address(lb_ptr, null_addr, &health));
 
-  // Null host map (default mock returns nullptr).
+  // Null host map.
+  ON_CALL(priority_set_, crossPriorityHostMap()).WillByDefault(Return(nullptr));
   envoy_dynamic_module_type_module_buffer valid_addr = {"10.0.0.1:8080", 13};
   EXPECT_FALSE(
       envoy_dynamic_module_callback_lb_get_host_health_by_address(lb_ptr, valid_addr, &health));
