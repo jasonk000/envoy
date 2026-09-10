@@ -73,6 +73,18 @@ void HistogramStatisticsImpl::refresh(const histogram_t* new_histogram_ptr) {
 
   std::fill(computed_quantiles_.begin(), computed_quantiles_.end(), 0.0);
   ASSERT(supportedQuantiles().size() == computed_quantiles_.size());
+
+  ConstSupportedBuckets& supported_buckets = supportedBuckets();
+
+  // Early return for empty histogram
+  if (hist_bucket_count(new_histogram_ptr) == 0) {
+    sample_count_ = 0;
+    sample_sum_ = 0;
+    computed_buckets_.assign(supported_buckets.size(), 0);
+    out_of_bound_count_ = 0;
+    return;
+  }
+
   hist_approx_quantile(new_histogram_ptr, supportedQuantiles().data(), supportedQuantiles().size(),
                        computed_quantiles_.data());
   if (unit_ == Histogram::Unit::Percent) {
@@ -88,7 +100,6 @@ void HistogramStatisticsImpl::refresh(const histogram_t* new_histogram_ptr) {
   }
 
   computed_buckets_.clear();
-  ConstSupportedBuckets& supported_buckets = supportedBuckets();
   computed_buckets_.reserve(supported_buckets.size());
   for (auto bucket : supported_buckets) {
     if (unit_ == Histogram::Unit::Percent) {
