@@ -3,10 +3,10 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <list>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "envoy/stats/stats_matcher.h"
 #include "envoy/stats/tag.h"
@@ -179,7 +179,7 @@ private:
   HistogramStatisticsImpl interval_statistics_;
   HistogramStatisticsImpl cumulative_statistics_;
   mutable Thread::MutexBasicLockable merge_lock_;
-  std::list<TlsHistogramSharedPtr> tls_histograms_ ABSL_GUARDED_BY(merge_lock_);
+  std::vector<TlsHistogramSharedPtr> tls_histograms_ ABSL_GUARDED_BY(merge_lock_);
   bool merged_{false};
   std::atomic<bool> shutting_down_{false};
   std::atomic<uint32_t> ref_count_{0};
