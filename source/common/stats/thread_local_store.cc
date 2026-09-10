@@ -1305,9 +1305,7 @@ void ParentHistogramImpl::merge() {
     }
 
     // Clear all used, even if hist_accumulate failed, so that next interval is clean.
-    for (histogram_t* source : sources) {
-      hist_clear(source);
-    }
+    hist_clear_many(sources.data(), sources.size());
 
     // TLS merge is done, we can release the lock here.
     lock.release();
