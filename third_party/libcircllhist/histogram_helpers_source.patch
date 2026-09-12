@@ -1,0 +1,32 @@
+--- a/src/circllhist.c
++++ b/src/circllhist.c
+@@ -1323,6 +1323,22 @@
+ }
+ 
+ int
++hist_accumulate_by_insert(histogram_t *tgt, const histogram_t * const *src, int cnt) {
++  int i, j;
++  ASSERT_GOOD_HIST(tgt);
++  for (i = 0; i < cnt; i++) {
++    if (!src[i]) continue;
++    ASSERT_GOOD_HIST(src[i]);
++    assert(tgt != src[i]);
++    for (j = 0; j < src[i]->used; j++) {
++      hist_insert_raw(tgt, src[i]->bvs[j].bucket, src[i]->bvs[j].count);
++    }
++  }
++  ASSERT_GOOD_HIST(tgt);
++  return tgt->used;
++}
++
++int
+ hist_num_buckets(const histogram_t *hist) {
+   return hist->used;
+ }
+@@ -1345,6 +1361,6 @@
+   }
+ }
+ 
+ histogram_t *
+ hist_alloc(void) {
+   return hist_alloc_nbins(0);

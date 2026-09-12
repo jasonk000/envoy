@@ -155,6 +155,16 @@ single_version_override(
 )
 
 single_version_override(
+    module_name = "libcircllhist",
+    version = "0.3.2.envoy",
+    patches = [
+        "//third_party/libcircllhist:histogram_helpers_header.patch",
+        "//third_party/libcircllhist:histogram_helpers_source.patch",
+    ],
+    patch_strip = 1,
+)
+
+single_version_override(
     module_name = "boringssl",
     version = "0.20260413.0",
 )
