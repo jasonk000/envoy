@@ -1,6 +1,6 @@
 --- a/src/circllhist.c
 +++ b/src/circllhist.c
-@@ -1323,6 +1323,53 @@
+@@ -1323,6 +1323,85 @@
  }
  
 +void
@@ -36,11 +36,46 @@
 +  int i, j;
 +  ASSERT_GOOD_HIST(tgt);
 +  for (i = 0; i < cnt; i++) {
++    int tgt_idx = 0;
 +    if (!src[i]) continue;
 +    ASSERT_GOOD_HIST(src[i]);
 +    assert(tgt != src[i]);
 +    for (j = 0; j < src[i]->used; j++) {
-+      hist_insert_raw(tgt, src[i]->bvs[j].bucket, src[i]->bvs[j].count);
++      hist_bucket_t bucket = src[i]->bvs[j].bucket;
++      while (tgt_idx < tgt->used &&
++             hist_bucket_cmp(tgt->bvs[tgt_idx].bucket, bucket) > 0) {
++        tgt_idx++;
++      }
++      if (tgt_idx < tgt->used && hist_bucket_cmp(tgt->bvs[tgt_idx].bucket, bucket) == 0) {
++        uint64_t old_count = tgt->bvs[tgt_idx].count;
++        uint64_t new_count = old_count + src[i]->bvs[j].count;
++        tgt->bvs[tgt_idx].count = new_count < old_count ? ~(uint64_t)0 : new_count;
++      } else {
++        if (tgt->bvs == NULL) {
++          tgt->bvs = tgt->allocator->malloc(DEFAULT_HIST_SIZE * sizeof(*tgt->bvs));
++          tgt->allocd = DEFAULT_HIST_SIZE;
++        }
++        if (tgt->used == tgt->allocd) {
++          histogram_t dummy;
++          dummy.bvs = tgt->allocator->malloc((tgt->allocd + DEFAULT_HIST_SIZE) *
++                                             sizeof(*tgt->bvs));
++          if (tgt_idx > 0)
++            memcpy(dummy.bvs, tgt->bvs, tgt_idx * sizeof(*tgt->bvs));
++          dummy.bvs[tgt_idx] = src[i]->bvs[j];
++          if (tgt_idx < tgt->used)
++            memcpy(dummy.bvs + tgt_idx + 1, tgt->bvs + tgt_idx,
++                   (tgt->used - tgt_idx) * sizeof(*tgt->bvs));
++          tgt->allocator->free(tgt->bvs);
++          tgt->bvs = dummy.bvs;
++          tgt->allocd += DEFAULT_HIST_SIZE;
++        } else {
++          memmove(tgt->bvs + tgt_idx + 1, tgt->bvs + tgt_idx,
++                  (tgt->used - tgt_idx) * sizeof(*tgt->bvs));
++          tgt->bvs[tgt_idx] = src[i]->bvs[j];
++        }
++        tgt->used++;
++      }
++      tgt_idx++;
 +    }
 +  }
 +  ASSERT_GOOD_HIST(tgt);
