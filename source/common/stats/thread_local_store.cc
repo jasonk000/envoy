@@ -1338,8 +1338,8 @@ void ParentHistogramImpl::merge() {
     // because the tls_histogram merge is not that expensive as it is a single histogram
     // merge and adding TLS histograms is rare.
 
-    // hist_accumulate does a calloc+rebuild for each call. Avoid this and send in only
-    // the hists that have content during the current interval.
+    // hist_accumulate_by_insert updates the target in place. Avoid sending empty histograms and
+    // send in only the hists that have content during the current interval.
     absl::InlinedVector<histogram_t*, 32> sources;
     absl::InlinedVector<const histogram_t*, 32> const_sources;
     bool has_interval_data = false;
@@ -1359,8 +1359,8 @@ void ParentHistogramImpl::merge() {
     if (!sources.empty()) {
       has_interval_data = true;
       ASSERT(sources.size() <= std::numeric_limits<int>::max());
-      hist_accumulate(interval_histogram_, const_sources.data(),
-                      static_cast<int>(const_sources.size()));
+      hist_accumulate_by_insert(interval_histogram_, const_sources.data(),
+                                static_cast<int>(const_sources.size()));
     }
 
     // Clear all used, even if hist_accumulate failed, so that next interval is clean.
@@ -1370,7 +1370,7 @@ void ParentHistogramImpl::merge() {
     lock.release();
 
     if (has_interval_data) {
-      hist_accumulate(cumulative_histogram_, &interval_histogram_, 1);
+      hist_accumulate_by_insert(cumulative_histogram_, &interval_histogram_, 1);
       cumulative_statistics_.refresh(cumulative_histogram_);
     }
 
