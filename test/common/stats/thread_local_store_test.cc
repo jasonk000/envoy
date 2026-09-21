@@ -2195,6 +2195,35 @@ TEST_F(HistogramTest, SnapshotKeepsPendingHistogramAlive) {
   EXPECT_TRUE(store_->histograms().empty());
 }
 
+TEST_F(HistogramTest, ConfiguredBinsSurviveHistogramMerge) {
+  envoy::config::metrics::v3::StatsConfig stats_config;
+  auto& histogram_setting = *stats_config.mutable_histogram_bucket_settings()->Add();
+  histogram_setting.mutable_match()->set_prefix("configured.");
+  histogram_setting.mutable_bins()->set_value(2);
+  store_->setHistogramSettings(std::make_unique<HistogramSettingsImpl>(stats_config, context_));
+
+  Histogram& histogram = scope_.histogramFromString("configured.histogram",
+                                                     Histogram::Unit::Unspecified);
+  auto& parent_histogram = static_cast<ParentHistogram&>(histogram);
+  EXPECT_EQ(static_cast<ParentHistogramImpl&>(histogram).bins(), 2);
+  EXPECT_CALL(sink_, onHistogramComplete(Ref(histogram), 10));
+  histogram.recordValue(10);
+  EXPECT_CALL(sink_, onHistogramComplete(Ref(histogram), 1000));
+  histogram.recordValue(1000);
+
+  store_->mergeHistograms([]() {});
+
+  EXPECT_EQ(parent_histogram.cumulativeStatistics().sampleCount(), 2);
+  EXPECT_EQ(parent_histogram.intervalStatistics().sampleCount(), 2);
+
+  EXPECT_CALL(sink_, onHistogramComplete(Ref(histogram), 100000));
+  histogram.recordValue(100000);
+  store_->mergeHistograms([]() {});
+
+  EXPECT_EQ(parent_histogram.cumulativeStatistics().sampleCount(), 3);
+  EXPECT_EQ(parent_histogram.intervalStatistics().sampleCount(), 1);
+}
+
 TEST_F(HistogramTest, BasicSingleHistogramMerge) {
   Histogram& h1 = scope_.histogramFromString("h1", Histogram::Unit::Unspecified);
   EXPECT_EQ("h1", h1.name());
