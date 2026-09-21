@@ -1,8 +1,36 @@
 --- a/src/circllhist.c
 +++ b/src/circllhist.c
-@@ -1323,6 +1323,22 @@
+@@ -1323,6 +1323,53 @@
  }
  
++void
++hist_approx_count_below_many(const histogram_t *hist, const double *thresholds, int count,
++                             uint64_t *results) {
++  int i = 0;
++  uint64_t running_count = 0;
++  if (!hist) {
++    for (int j = 0; j < count; ++j) results[j] = 0;
++    return;
++  }
++  ASSERT_GOOD_HIST(hist);
++  for (int j = 0; j < count; ++j) {
++    while (i < hist->used) {
++      if (hist_bucket_isnan(hist->bvs[i].bucket)) {
++        ++i;
++        continue;
++      }
++      double bucket_bound = hist_bucket_to_double(hist->bvs[i].bucket);
++      double bucket_lower = bucket_bound < 0.0
++                                ? bucket_bound - hist_bucket_to_double_bin_width(hist->bvs[i].bucket)
++                                : bucket_bound;
++      if (bucket_lower > thresholds[j]) break;
++      running_count += hist->bvs[i].count;
++      ++i;
++    }
++    results[j] = running_count;
++  }
++}
++
  int
 +hist_accumulate_by_insert(histogram_t *tgt, const histogram_t * const *src, int cnt) {
 +  int i, j;
