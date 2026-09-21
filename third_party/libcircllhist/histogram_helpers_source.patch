@@ -23,10 +23,16 @@
  hist_num_buckets(const histogram_t *hist) {
    return hist->used;
  }
-@@ -1345,6 +1361,6 @@
+@@ -1345,6 +1361,12 @@
    }
  }
  
++void
++hist_clear_many(histogram_t * const *histograms, int count) {
++  for (int i = 0; i < count; ++i)
++    hist_clear(histograms[i]);
++}
++
  histogram_t *
  hist_alloc(void) {
    return hist_alloc_nbins(0);
