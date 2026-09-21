@@ -81,26 +81,21 @@ void HistogramStatisticsImpl::refresh(const histogram_t* new_histogram_ptr) {
     }
   }
 
-  sample_count_ = hist_sample_count(new_histogram_ptr);
-  sample_sum_ = hist_approx_sum(new_histogram_ptr);
-  if (unit_ == Histogram::Unit::Percent) {
-    sample_sum_ /= percent_scale;
-  }
-
   ConstSupportedBuckets& supported_buckets = supportedBuckets();
   computed_buckets_.resize(supported_buckets.size());
   if (unit_ == Histogram::Unit::Percent) {
+    sample_count_ = hist_sample_count(new_histogram_ptr);
+    sample_sum_ = hist_approx_sum(new_histogram_ptr) / percent_scale;
     for (size_t i = 0; i < supported_buckets.size(); ++i) {
       computed_buckets_[i] = hist_approx_count_below(
           new_histogram_ptr, supported_buckets[i] * percent_scale);
     }
+    out_of_bound_count_ = hist_approx_count_above(new_histogram_ptr, supported_buckets.back());
   } else {
-    hist_approx_count_below_many(new_histogram_ptr, supported_buckets.data(),
-                                 static_cast<int>(supported_buckets.size()),
-                                 computed_buckets_.data());
+    hist_approx_stats(new_histogram_ptr, supported_buckets.data(),
+                      static_cast<int>(supported_buckets.size()), computed_buckets_.data(),
+                      &sample_count_, &sample_sum_, &out_of_bound_count_);
   }
-
-  out_of_bound_count_ = hist_approx_count_above(new_histogram_ptr, supported_buckets.back());
 }
 
 HistogramSettingsImpl::HistogramSettingsImpl(const envoy::config::metrics::v3::StatsConfig& config,
