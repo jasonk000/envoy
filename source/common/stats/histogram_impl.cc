@@ -87,14 +87,17 @@ void HistogramStatisticsImpl::refresh(const histogram_t* new_histogram_ptr) {
     sample_sum_ /= percent_scale;
   }
 
-  computed_buckets_.clear();
   ConstSupportedBuckets& supported_buckets = supportedBuckets();
-  computed_buckets_.reserve(supported_buckets.size());
-  for (auto bucket : supported_buckets) {
-    if (unit_ == Histogram::Unit::Percent) {
-      bucket *= percent_scale;
+  computed_buckets_.resize(supported_buckets.size());
+  if (unit_ == Histogram::Unit::Percent) {
+    for (size_t i = 0; i < supported_buckets.size(); ++i) {
+      computed_buckets_[i] = hist_approx_count_below(
+          new_histogram_ptr, supported_buckets[i] * percent_scale);
     }
-    computed_buckets_.emplace_back(hist_approx_count_below(new_histogram_ptr, bucket));
+  } else {
+    hist_approx_count_below_many(new_histogram_ptr, supported_buckets.data(),
+                                 static_cast<int>(supported_buckets.size()),
+                                 computed_buckets_.data());
   }
 
   out_of_bound_count_ = hist_approx_count_above(new_histogram_ptr, supported_buckets.back());
