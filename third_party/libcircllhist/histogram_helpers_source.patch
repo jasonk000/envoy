@@ -1,6 +1,6 @@
 --- a/src/circllhist.c
 +++ b/src/circllhist.c
-@@ -1323,6 +1323,85 @@
+@@ -1323,6 +1323,124 @@
  }
  
 +void
@@ -29,6 +29,45 @@
 +    }
 +    results[j] = running_count;
 +  }
++}
++
++void
++hist_approx_stats(const histogram_t *hist, const double *thresholds, int count, uint64_t *below,
++                  uint64_t *sample_count, double *sample_sum, uint64_t *above) {
++  uint64_t total = 0;
++  uint64_t below_strict = 0;
++  uint64_t running_count = 0;
++  double sum = 0.0;
++  int threshold_idx = 0;
++  if (!hist) {
++    for (int i = 0; i < count; ++i) below[i] = 0;
++    *sample_count = 0;
++    *sample_sum = 0.0;
++    *above = 0;
++    return;
++  }
++  ASSERT_GOOD_HIST(hist);
++  for (int i = 0; i < hist->used; ++i) {
++    uint64_t previous_total = total;
++    uint64_t bucket_count = hist->bvs[i].count;
++    total += bucket_count;
++    if (total < previous_total) total = ~(uint64_t)0;
++    if (hist_bucket_isnan(hist->bvs[i].bucket)) continue;
++    double bucket_bound = hist_bucket_to_double(hist->bvs[i].bucket);
++    double bucket_lower = bucket_bound < 0.0
++                              ? bucket_bound - hist_bucket_to_double_bin_width(hist->bvs[i].bucket)
++                              : bucket_bound;
++    sum += hist_bucket_midpoint(hist->bvs[i].bucket) * bucket_count;
++    while (threshold_idx < count && bucket_lower > thresholds[threshold_idx]) {
++      below[threshold_idx++] = running_count;
++    }
++    if (count > 0 && bucket_lower < thresholds[count - 1]) below_strict += bucket_count;
++    running_count += bucket_count;
++  }
++  while (threshold_idx < count) below[threshold_idx++] = running_count;
++  *sample_count = total;
++  *sample_sum = sum;
++  *above = count > 0 ? total - below_strict : 0;
 +}
 +
  int
