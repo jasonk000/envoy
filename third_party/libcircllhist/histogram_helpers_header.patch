@@ -18,7 +18,7 @@
  //! Subtract bins from each of cnt histograms in src from tgt, return -1 on underrun error
  API_EXPORT(int) hist_subtract(histogram_t *tgt, const histogram_t * const *src, int cnt);
  //! Subtract bins in src from tgt treating the result count as signed, return -1 on overflow error
-@@ -166,6 +170,6 @@
+@@ -166,6 +170,8 @@
  API_EXPORT(int) hist_add_as_int64(histogram_t *tgt, const histogram_t *src);
  //! Clear data fast. Keeps buckets allocated.
  API_EXPORT(void) hist_clear(histogram_t *hist);
