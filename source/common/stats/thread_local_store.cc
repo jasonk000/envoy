@@ -113,8 +113,10 @@ void ThreadLocalStoreImpl::setStatsMatcher(StatsMatcherPtr&& stats_matcher) {
 
   // Remove any newly rejected histograms from histogram_set_.
   {
+    Thread::LockGuard lookup_lock(histogram_lookup_lock_);
     Thread::LockGuard hist_lock(hist_mutex_);
     for (uint32_t i = first_histogram_index; i < deleted_histograms_.size(); ++i) {
+      histogram_lookup_.erase(deleted_histograms_[i]->statName());
       uint32_t erased = histogram_set_.erase(deleted_histograms_[i].get());
       ASSERT(erased == 1);
       sinked_histograms_.erase(deleted_histograms_[i].get());
@@ -307,12 +309,27 @@ void ThreadLocalStoreImpl::shutdownThreading() {
     central_cache_entries_to_cleanup_.clear();
   }
 
-  Thread::LockGuard lock(hist_mutex_);
-  for (ParentHistogramImpl* histogram : histogram_set_) {
-    histogram->setShuttingDown(true);
+  std::vector<ParentHistogramImplSharedPtr> pending;
+  {
+    Thread::LockGuard lock(pending_parent_histograms_lock_);
+    accept_pending_parent_histograms_ = false;
+    pending.swap(pending_parent_histograms_);
   }
-  histogram_set_.clear();
-  sinked_histograms_.clear();
+
+  {
+    Thread::LockGuard lookup_lock(histogram_lookup_lock_);
+    Thread::LockGuard lock(hist_mutex_);
+    for (ParentHistogramImpl* histogram : histogram_set_) {
+      histogram->setShuttingDown(true);
+    }
+    for (const ParentHistogramImplSharedPtr& histogram : pending) {
+      histogram->setShuttingDown(true);
+    }
+    histogram_lookup_.clear();
+    histogram_set_.clear();
+    sinked_histograms_.clear();
+  }
+  pending.clear();
 }
 
 void ThreadLocalStoreImpl::mergeHistograms(PostMergeCb merge_complete_cb) {
@@ -334,6 +351,33 @@ void ThreadLocalStoreImpl::mergeHistograms(PostMergeCb merge_complete_cb) {
   }
 }
 
+void ThreadLocalStoreImpl::enqueueParentHistogram(ParentHistogramImplSharedPtr histogram) {
+  Thread::LockGuard lock(pending_parent_histograms_lock_);
+  if (accept_pending_parent_histograms_) {
+    pending_parent_histograms_.push_back(std::move(histogram));
+  }
+}
+
+void ThreadLocalStoreImpl::drainPendingParentHistograms() {
+  ASSERT_IS_MAIN_OR_TEST_THREAD();
+
+  std::vector<ParentHistogramImplSharedPtr> pending;
+  {
+    Thread::LockGuard lock(pending_parent_histograms_lock_);
+    pending.swap(pending_parent_histograms_);
+  }
+
+  Thread::LockGuard lock(hist_mutex_);
+  for (const ParentHistogramImplSharedPtr& histogram : pending) {
+    if (!histogram->shuttingDown()) {
+      histogram_set_.insert(histogram.get());
+      if (sink_predicates_.has_value() && sink_predicates_->includeHistogram(*histogram)) {
+        sinked_histograms_.insert(histogram.get());
+      }
+    }
+  }
+}
+
 void ThreadLocalStoreImpl::startChunkedMerge() {
   if (shutting_down_) {
     return;
@@ -341,6 +385,7 @@ void ThreadLocalStoreImpl::startChunkedMerge() {
 
   ASSERT_IS_MAIN_OR_TEST_THREAD();
   ASSERT(merge_in_progress_);
+  drainPendingParentHistograms();
   // Take a copy of histograms, and increment refcount, because the histogram_set_ might
   // be changed between calls. We need a stable reference.
   merge_histograms_ = histograms();
@@ -991,10 +1036,10 @@ Histogram& ThreadLocalStoreImpl::ScopeImpl::getOrCreateHistogramBase(
 
     RefcountPtr<ParentHistogramImpl> stat;
     {
-      Thread::LockGuard lock(parent_.hist_mutex_);
-      auto iter = parent_.histogram_set_.find(final_stat_name);
-      if (iter != parent_.histogram_set_.end()) {
-        stat = RefcountPtr<ParentHistogramImpl>(*iter);
+      Thread::LockGuard lookup_lock(parent_.histogram_lookup_lock_);
+      auto histogram = parent_.histogram_lookup_.find(final_stat_name);
+      if (histogram != parent_.histogram_lookup_.end()) {
+        stat = RefcountPtr<ParentHistogramImpl>(histogram->second);
       } else {
         if (limits_.max_histograms.has_value() &&
             central_cache->histograms_.size() >= limits_.max_histograms.value()) {
@@ -1005,10 +1050,16 @@ Histogram& ThreadLocalStoreImpl::ScopeImpl::getOrCreateHistogramBase(
                                        tag_helper.tagExtractedName(), tag_helper.statNameTags(),
                                        *buckets, bins, parent_.next_histogram_id_++);
         if (!parent_.shutting_down_) {
-          parent_.histogram_set_.insert(stat.get());
-          if (parent_.sink_predicates_.has_value() &&
-              parent_.sink_predicates_->includeHistogram(*stat)) {
-            parent_.sinked_histograms_.insert(stat.get());
+          parent_.histogram_lookup_.try_emplace(stat->statName(), stat.get());
+          if (Thread::MainThread::isMainOrTestThread() || !parent_.threading_ever_initialized_) {
+            Thread::LockGuard lock(parent_.hist_mutex_);
+            parent_.histogram_set_.insert(stat.get());
+            if (parent_.sink_predicates_.has_value() &&
+                parent_.sink_predicates_->includeHistogram(*stat)) {
+              parent_.sinked_histograms_.insert(stat.get());
+            }
+          } else {
+            parent_.enqueueParentHistogram(stat);
           }
         }
       }
@@ -1268,9 +1319,9 @@ bool ParentHistogramImpl::decRefCount() {
   }
 
   // Fast path: when this is not the last reference, drop it without taking
-  // the store's histogram lock; see tryDecRefCountFastPath() in
-  // refcount_ptr.h for the interleaving analysis, with the store's histogram
-  // lock playing the role of the allocator's mutex.
+  // the store's histogram lookup lock; see tryDecRefCountFastPath() in
+  // refcount_ptr.h for the interleaving analysis, with the lookup lock playing
+  // the role of the allocator's mutex.
   if (tryDecRefCountFastPath(ref_count_)) {
     return false;
   }
@@ -1286,17 +1337,20 @@ bool ParentHistogramImpl::decRefCount() {
 
 bool ThreadLocalStoreImpl::decHistogramRefCount(ParentHistogramImpl& hist,
                                                 std::atomic<uint32_t>& ref_count) {
-  // We must hold the store's histogram lock when decrementing the
+  // We must hold the store's histogram lookup lock when decrementing the
   // refcount. Otherwise another thread may simultaneously try to allocate the
   // same name'd stat after we decrement it, and we'll wind up with a
   // dtor/update race. To avoid this we must hold the lock until the stat is
-  // removed from the map.
+  // removed from both registries.
+  Thread::LockGuard lookup_lock(histogram_lookup_lock_);
   Thread::LockGuard lock(hist_mutex_);
   ASSERT(ref_count >= 1);
   if (--ref_count == 0) {
     if (!shutting_down_) {
+      const size_t lookup_count = histogram_lookup_.erase(hist.statName());
       const size_t count = histogram_set_.erase(hist.statName());
-      ASSERT(shutting_down_ || count == 1);
+      ASSERT(lookup_count == 1);
+      ASSERT(count == 1);
       sinked_histograms_.erase(&hist);
     }
     return true;

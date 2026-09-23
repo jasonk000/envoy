@@ -68,6 +68,22 @@ public:
         },
         [num_tls_hist_cb, num_tls_histograms]() { num_tls_hist_cb(*num_tls_histograms); });
   }
+
+  static void whileHistogramLockHeld(ThreadLocalStoreImpl& thread_local_store_impl,
+                                     const std::function<void()>& callback) {
+    Thread::LockGuard lock(thread_local_store_impl.hist_mutex_);
+    callback();
+  }
+
+  static size_t numPendingParentHistograms(ThreadLocalStoreImpl& thread_local_store_impl) {
+    Thread::LockGuard lock(thread_local_store_impl.pending_parent_histograms_lock_);
+    return thread_local_store_impl.pending_parent_histograms_.size();
+  }
+
+  static size_t numHistogramLookups(ThreadLocalStoreImpl& thread_local_store_impl) {
+    Thread::LockGuard lock(thread_local_store_impl.histogram_lookup_lock_);
+    return thread_local_store_impl.histogram_lookup_.size();
+  }
 };
 
 class StatsThreadLocalStoreTest : public testing::Test {
@@ -2731,6 +2747,64 @@ protected:
     runOnAllWorkersBlocking([&fn]() { fn(); });
   }
 };
+
+TEST_F(HistogramThreadTest, ParentCreationDoesNotTakeHistogramLock) {
+  ThreadLocalStoreTestingPeer::whileHistogramLockHeld(*store_, [this]() {
+    foreachThread([this]() {
+      Histogram& histogram = scope_.histogramFromString("my_hist", Histogram::Unit::Unspecified);
+      histogram.recordValue(42);
+    });
+  });
+
+  mergeHistograms();
+
+  auto histograms = store_->histograms();
+  ASSERT_EQ(1, histograms.size());
+  EXPECT_THAT(histograms[0]->bucketSummary(),
+              HasSubstr(absl::StrCat(" B25(0,0) B50(", NumThreads, ",", NumThreads, ") ")));
+}
+
+TEST_F(HistogramThreadTest, ShutdownWithUndrainedParentHistogram) {
+  foreachThread([this]() {
+    Histogram& histogram =
+        scope_.histogramFromString("pending_hist", Histogram::Unit::Unspecified);
+    histogram.recordValue(42);
+  });
+
+  EXPECT_TRUE(store_->histograms().empty());
+  EXPECT_EQ(1, ThreadLocalStoreTestingPeer::numPendingParentHistograms(*store_));
+  EXPECT_EQ(1, ThreadLocalStoreTestingPeer::numHistogramLookups(*store_));
+
+  shutdownThreading();
+
+  EXPECT_EQ(0, ThreadLocalStoreTestingPeer::numPendingParentHistograms(*store_));
+  EXPECT_EQ(0, ThreadLocalStoreTestingPeer::numHistogramLookups(*store_));
+}
+
+TEST_F(HistogramThreadTest, StartupBurstDrainsAllPendingParentHistograms) {
+  constexpr uint32_t NumHistograms = 100;
+  foreachThread([this]() {
+    for (uint32_t index = 0; index < NumHistograms; ++index) {
+      Histogram& histogram = scope_.histogramFromString(absl::StrCat("startup_hist_", index),
+                                                        Histogram::Unit::Unspecified);
+      histogram.recordValue(42);
+    }
+  });
+
+  EXPECT_TRUE(store_->histograms().empty());
+  EXPECT_EQ(NumHistograms,
+            ThreadLocalStoreTestingPeer::numPendingParentHistograms(*store_));
+
+  mergeHistograms();
+
+  const auto histograms = store_->histograms();
+  ASSERT_EQ(NumHistograms, histograms.size());
+  EXPECT_EQ(0, ThreadLocalStoreTestingPeer::numPendingParentHistograms(*store_));
+  for (const ParentHistogramSharedPtr& histogram : histograms) {
+    EXPECT_THAT(histogram->bucketSummary(),
+                HasSubstr(absl::StrCat(" B25(0,0) B50(", NumThreads, ",", NumThreads, ") ")));
+  }
+}
 
 TEST_F(HistogramThreadTest, MakeHistogramsAndRecordValues) {
   foreachThread([this]() {

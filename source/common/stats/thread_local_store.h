@@ -636,6 +636,8 @@ private:
   void clearScopesFromCaches();
   void clearHistogramsFromCaches();
   void releaseScopeCrossThread(ScopeImpl* scope);
+  void enqueueParentHistogram(ParentHistogramImplSharedPtr histogram);
+  void drainPendingParentHistograms();
   void startChunkedMerge();
   void mergeChunk();
   void finishChunkedMerge();
@@ -661,6 +663,9 @@ private:
   ThreadLocal::TypedSlotPtr<TlsCache> tls_cache_;
   mutable Thread::MutexBasicLockable lock_;
   absl::flat_hash_map<ScopeImpl*, std::weak_ptr<ScopeImpl>> scopes_ ABSL_GUARDED_BY(lock_);
+  // This map provides canonical histogram lookup without contending with merge snapshots.
+  mutable Thread::MutexBasicLockable histogram_lookup_lock_;
+  StatNameHashMap<ParentHistogramImpl*> histogram_lookup_ ABSL_GUARDED_BY(histogram_lookup_lock_);
   ScopeSharedPtr default_scope_;
   std::vector<std::reference_wrapper<Sink>> timer_sinks_;
   TagProducerPtr tag_producer_;
@@ -677,6 +682,12 @@ private:
   size_t merge_histogram_index_{0};
   PostMergeCb merge_complete_cb_;
 
+  // Workers queue new parents here instead of blocking on hist_mutex_ during a merge snapshot.
+  Thread::MutexBasicLockable pending_parent_histograms_lock_;
+  std::vector<ParentHistogramImplSharedPtr>
+      pending_parent_histograms_ ABSL_GUARDED_BY(pending_parent_histograms_lock_);
+  bool accept_pending_parent_histograms_ ABSL_GUARDED_BY(pending_parent_histograms_lock_){true};
+
   NullCounterImpl null_counter_;
   NullGaugeImpl null_gauge_;
   NullHistogramImpl null_histogram_;
@@ -684,7 +695,7 @@ private:
 
   mutable Thread::ThreadSynchronizer sync_;
   std::atomic<uint64_t> next_scope_id_{0};
-  uint64_t next_histogram_id_ ABSL_GUARDED_BY(hist_mutex_) = 0;
+  uint64_t next_histogram_id_ ABSL_GUARDED_BY(histogram_lookup_lock_) = 0;
 
   StatNameSetPtr well_known_tags_;
   // When true, scopes use the explicit-tags logic (ScopeImpl::useExplicitTags()), enabling the
