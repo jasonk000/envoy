@@ -330,6 +330,7 @@ void ThreadLocalStoreImpl::shutdownThreading() {
     sinked_histograms_.clear();
   }
   pending.clear();
+  draining_parent_histograms_.clear();
 }
 
 void ThreadLocalStoreImpl::mergeHistograms(PostMergeCb merge_complete_cb) {
@@ -361,21 +362,25 @@ void ThreadLocalStoreImpl::enqueueParentHistogram(ParentHistogramImplSharedPtr h
 void ThreadLocalStoreImpl::drainPendingParentHistograms() {
   ASSERT_IS_MAIN_OR_TEST_THREAD();
 
-  std::vector<ParentHistogramImplSharedPtr> pending;
   {
     Thread::LockGuard lock(pending_parent_histograms_lock_);
-    pending.swap(pending_parent_histograms_);
+    pending_parent_histograms_.swap(draining_parent_histograms_);
   }
 
-  Thread::LockGuard lock(hist_mutex_);
-  for (const ParentHistogramImplSharedPtr& histogram : pending) {
-    if (!histogram->shuttingDown()) {
-      histogram_set_.insert(histogram.get());
-      if (sink_predicates_.has_value() && sink_predicates_->includeHistogram(*histogram)) {
-        sinked_histograms_.insert(histogram.get());
+  {
+    Thread::LockGuard lock(hist_mutex_);
+    for (const ParentHistogramImplSharedPtr& histogram : draining_parent_histograms_) {
+      if (!histogram->shuttingDown()) {
+        histogram_set_.insert(histogram.get());
+        if (sink_predicates_.has_value() && sink_predicates_->includeHistogram(*histogram)) {
+          sinked_histograms_.insert(histogram.get());
+        }
       }
     }
   }
+
+  // Keep the allocation for the next drain. The next swap gives this capacity to workers.
+  draining_parent_histograms_.clear();
 }
 
 void ThreadLocalStoreImpl::startChunkedMerge() {

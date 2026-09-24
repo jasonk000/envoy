@@ -686,6 +686,8 @@ private:
   Thread::MutexBasicLockable pending_parent_histograms_lock_;
   std::vector<ParentHistogramImplSharedPtr>
       pending_parent_histograms_ ABSL_GUARDED_BY(pending_parent_histograms_lock_);
+  // Retain the drained buffer so workers do not repeatedly allocate it for each merge.
+  std::vector<ParentHistogramImplSharedPtr> draining_parent_histograms_;
   bool accept_pending_parent_histograms_ ABSL_GUARDED_BY(pending_parent_histograms_lock_){true};
 
   NullCounterImpl null_counter_;

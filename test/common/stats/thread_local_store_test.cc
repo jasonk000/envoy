@@ -80,6 +80,10 @@ public:
     return thread_local_store_impl.pending_parent_histograms_.size();
   }
 
+  static size_t drainingParentHistogramsCapacity(ThreadLocalStoreImpl& thread_local_store_impl) {
+    return thread_local_store_impl.draining_parent_histograms_.capacity();
+  }
+
   static size_t numHistogramLookups(ThreadLocalStoreImpl& thread_local_store_impl) {
     Thread::LockGuard lock(thread_local_store_impl.histogram_lookup_lock_);
     return thread_local_store_impl.histogram_lookup_.size();
@@ -2800,6 +2804,7 @@ TEST_F(HistogramThreadTest, StartupBurstDrainsAllPendingParentHistograms) {
   const auto histograms = store_->histograms();
   ASSERT_EQ(NumHistograms, histograms.size());
   EXPECT_EQ(0, ThreadLocalStoreTestingPeer::numPendingParentHistograms(*store_));
+  EXPECT_GE(ThreadLocalStoreTestingPeer::drainingParentHistogramsCapacity(*store_), NumHistograms);
   for (const ParentHistogramSharedPtr& histogram : histograms) {
     EXPECT_THAT(histogram->bucketSummary(),
                 HasSubstr(absl::StrCat(" B25(0,0) B50(", NumThreads, ",", NumThreads, ") ")));
