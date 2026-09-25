@@ -676,7 +676,8 @@ private:
   std::atomic<bool> merge_in_progress_{false};
   OptRef<ThreadLocal::Instance> tls_;
 
-  static constexpr size_t MergeBatchSize = 5000;
+  // Keep each main-thread merge callback short enough to let other dispatcher work run.
+  static constexpr size_t MergeBatchSize = 256;
   Event::SchedulableCallbackPtr merge_callback_;
   std::vector<ParentHistogramSharedPtr> merge_histograms_;
   size_t merge_histogram_index_{0};

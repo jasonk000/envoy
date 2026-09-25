@@ -2167,7 +2167,7 @@ TEST_P(HistogramMergeBatchTest, MergesBoundarySizedBatch) {
     last->recordValue(2);
   }
 
-  const size_t continuation_count = histogram_count == 0 ? 0 : (histogram_count - 1) / 5000;
+  const size_t continuation_count = histogram_count == 0 ? 0 : (histogram_count - 1) / 256;
   Event::MockSchedulableCallback* merge_callback = nullptr;
   if (continuation_count > 0) {
     merge_callback = new Event::MockSchedulableCallback(&main_thread_dispatcher_);
@@ -2193,11 +2193,12 @@ TEST_P(HistogramMergeBatchTest, MergesBoundarySizedBatch) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Boundaries, HistogramMergeBatchTest,
-                         testing::Values(0, 1, 4999, 5000, 5001, 10000, 10001));
+                         testing::Values(0, 1, 255, 256, 257, 512, 513));
 
 TEST_F(HistogramTest, SnapshotKeepsPendingHistogramAlive) {
   ScopeSharedPtr scope = store_->createScope("batch.");
-  for (size_t i = 0; i <= 5000; ++i) {
+  // Create one histogram more than a merge batch so that the continuation path is exercised.
+  for (size_t i = 0; i <= 256; ++i) {
     scope->histogramFromString("h" + std::to_string(i), Histogram::Unit::Unspecified);
   }
 
