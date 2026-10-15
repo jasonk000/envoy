@@ -1,0 +1,28 @@
+diff --git a/MODULE.bazel b/MODULE.bazel
+new file mode 100644
+--- /dev/null
++++ b/MODULE.bazel
+@@ -0,0 +1,7 @@
++module(
++    name = "libcircllhist",
++    version = "0.0.0-master",
++)
++
++bazel_dep(name = "platforms", version = "1.1.0")
++bazel_dep(name = "rules_cc", version = "0.2.25")
+diff --git a/BUILD.bazel b/BUILD.bazel
+new file mode 100644
+--- /dev/null
++++ b/BUILD.bazel
+@@ -0,0 +1,11 @@
++load("@rules_cc//cc:defs.bzl", "cc_library")
++
++licenses(["notice"])
++
++cc_library(
++    name = "libcircllhist",
++    srcs = ["src/circllhist.c", "src/dcdflib.c", "src/ipmpar.c"],
++    hdrs = ["src/cdflib.h", "src/circllhist.h"],
++    includes = ["src"],
++    visibility = ["//visibility:public"],
++)

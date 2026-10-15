@@ -152,6 +152,14 @@ single_version_override(
     version = "0.20260813.0",
 )
 
+git_override(
+    module_name = "libcircllhist",
+    commit = "590c254f10e56b7fb010bec195f08008230f8625",
+    remote = "https://github.com/jasonk000/libcircllhist.git",
+    patches = ["//third_party/libcircllhist:bazel_metadata.patch"],
+    patch_args = ["-p1"],
+)
+
 # testing/debugging
 # local_path_override(
 #     module_name = "envoy_toolshed",
