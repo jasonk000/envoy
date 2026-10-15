@@ -109,7 +109,7 @@ TEST_F(HistogramSettingsImplTest, Priority) {
   EXPECT_EQ(settings_->bins("abcd"), 1);
 }
 
-TEST_F(HistogramSettingsImplTest, ScaledPercent) {
+TEST_F(HistogramSettingsImplTest, PreparedQueriesAreShared) {
   envoy::config::metrics::v3::HistogramBucketSettings setting;
   setting.mutable_match()->set_prefix("a");
   setting.mutable_buckets()->Add(0.1);
@@ -117,8 +117,15 @@ TEST_F(HistogramSettingsImplTest, ScaledPercent) {
   buckets_configs_.push_back(setting);
 
   initialize();
-  EXPECT_EQ(settings_->buckets("test"), settings_->defaultBuckets());
-  EXPECT_EQ(settings_->buckets("abcd"), ConstSupportedBuckets({0.1, 2}));
+  const auto* configured = settings_->preparedQuery("abcd", Histogram::Unit::Unspecified);
+  EXPECT_NE(configured, nullptr);
+  EXPECT_EQ(configured, settings_->preparedQuery("abcd", Histogram::Unit::Unspecified));
+  EXPECT_NE(configured, settings_->preparedQuery("abcd", Histogram::Unit::Percent));
+
+  const auto* defaults = settings_->preparedQuery("test", Histogram::Unit::Unspecified);
+  EXPECT_EQ(defaults, settings_->defaultPreparedQuery(Histogram::Unit::Unspecified));
+  EXPECT_NE(defaults, configured);
+  EXPECT_NE(defaults, settings_->defaultPreparedQuery(Histogram::Unit::Percent));
 }
 
 } // namespace Stats

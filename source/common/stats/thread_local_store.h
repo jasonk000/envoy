@@ -122,7 +122,8 @@ class ParentHistogramImpl : public MetricImpl<ParentHistogram> {
 public:
   ParentHistogramImpl(StatName name, Histogram::Unit unit, ThreadLocalStoreImpl& parent,
                       StatName tag_extracted_name, StatNameTagSpan stat_name_tags,
-                      ConstSupportedBuckets& supported_buckets, std::optional<uint32_t> bins,
+                      ConstSupportedBuckets& supported_buckets,
+                      const PreparedSummaryQuery* prepared_query, std::optional<uint32_t> bins,
                       uint64_t id);
   ~ParentHistogramImpl() override;
 

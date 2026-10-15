@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include "envoy/config/metrics/v3/stats.pb.h"
@@ -17,6 +18,13 @@
 namespace Envoy {
 namespace Stats {
 
+using PreparedSummaryQuery = hist_prepared_bounds_t;
+
+struct PreparedSummaryQueryDeleter {
+  void operator()(PreparedSummaryQuery* query) const { hist_prepared_bounds_free(query); }
+};
+using PreparedSummaryQueryPtr = std::unique_ptr<PreparedSummaryQuery, PreparedSummaryQueryDeleter>;
+
 class HistogramSettingsImpl : public HistogramSettings {
 public:
   HistogramSettingsImpl() = default;
@@ -25,14 +33,19 @@ public:
 
   // HistogramSettings
   const ConstSupportedBuckets& buckets(absl::string_view stat_name) const override;
+  const PreparedSummaryQuery* preparedQuery(absl::string_view stat_name,
+                                            Histogram::Unit unit) const;
   std::optional<uint32_t> bins(absl::string_view stat_name) const override;
 
   static ConstSupportedBuckets& defaultBuckets();
+  static const PreparedSummaryQuery* defaultPreparedQuery(Histogram::Unit unit);
 
 private:
   struct Config {
     Matchers::StringMatcherImpl matcher_;
     std::optional<ConstSupportedBuckets> buckets_;
+    PreparedSummaryQueryPtr prepared_query_;
+    PreparedSummaryQueryPtr prepared_percent_query_;
     std::optional<uint32_t> bins_;
   };
   const std::vector<Config> configs_;
@@ -52,7 +65,8 @@ public:
    */
   HistogramStatisticsImpl(
       const histogram_t* histogram_ptr, Histogram::Unit unit = Histogram::Unit::Unspecified,
-      ConstSupportedBuckets& supported_buckets = HistogramSettingsImpl::defaultBuckets());
+      ConstSupportedBuckets& supported_buckets = HistogramSettingsImpl::defaultBuckets(),
+      const PreparedSummaryQuery* prepared_query = nullptr);
 
   void refresh(const histogram_t* new_histogram_ptr);
   void reset();
@@ -71,6 +85,8 @@ public:
 
 private:
   ConstSupportedBuckets& supported_buckets_;
+  PreparedSummaryQueryPtr owned_prepared_query_;
+  const PreparedSummaryQuery* prepared_query_;
   std::vector<double> computed_quantiles_;
   std::vector<uint64_t> computed_buckets_;
   uint64_t sample_count_{0};

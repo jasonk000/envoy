@@ -986,6 +986,11 @@ Histogram& ThreadLocalStoreImpl::ScopeImpl::getOrCreateHistogramBase(
     const auto string_stat_name = symbolTable().toString(final_stat_name);
     buckets = &parent_.histogram_settings_->buckets(string_stat_name);
     const auto bins = parent_.histogram_settings_->bins(string_stat_name);
+    const PreparedSummaryQuery* prepared_query = nullptr;
+    if (const auto* settings =
+            dynamic_cast<const HistogramSettingsImpl*>(parent_.histogram_settings_.get())) {
+      prepared_query = settings->preparedQuery(string_stat_name, unit);
+    }
 
     RefcountPtr<ParentHistogramImpl> stat;
     {
@@ -999,9 +1004,10 @@ Histogram& ThreadLocalStoreImpl::ScopeImpl::getOrCreateHistogramBase(
           parent_.histograms_overflow_->inc();
           return parent_.null_histogram_;
         }
-        stat = new ParentHistogramImpl(final_stat_name, unit, parent_,
-                                       tag_helper.tagExtractedName(), tag_helper.statNameTags(),
-                                       *buckets, bins, parent_.next_histogram_id_++);
+        stat =
+            new ParentHistogramImpl(final_stat_name, unit, parent_, tag_helper.tagExtractedName(),
+                                    tag_helper.statNameTags(), *buckets, prepared_query, bins,
+                                    parent_.next_histogram_id_++);
         if (!parent_.shutting_down_) {
           parent_.histogram_set_.insert(stat.get());
           if (parent_.sink_predicates_.has_value() &&
@@ -1168,7 +1174,7 @@ void TlsHistogramState::insert(hist_bucket_t bucket, uint64_t count, uint16_t in
 
     const uint64_t count_copy = inline_count_;
     histogram_ptr_ = initial_bins != UINT16_MAX ? hist_alloc_nbins(static_cast<int>(initial_bins))
-                                                : hist_alloc();
+                                                : hist_alloc_nbins(16);
     hist_insert_raw(histogram_ptr_, inline_bucket_, count_copy);
     state_ = State::MaterializedUsed;
   } else if (state_ == State::MaterializedEmpty) {
@@ -1231,13 +1237,15 @@ ParentHistogramImpl::ParentHistogramImpl(StatName name, Histogram::Unit unit,
                                          StatName tag_extracted_name,
                                          StatNameTagSpan stat_name_tags,
                                          ConstSupportedBuckets& supported_buckets,
+                                         const PreparedSummaryQuery* prepared_query,
                                          std::optional<uint32_t> bins, uint64_t id)
     : MetricImpl(name, tag_extracted_name, stat_name_tags, thread_local_store.symbolTable()),
       unit_(unit), bins_(bins.has_value() ? static_cast<uint16_t>(bins.value()) : NoBins),
       thread_local_store_(thread_local_store), interval_histogram_(hist_alloc()),
       cumulative_histogram_(hist_alloc()),
-      interval_statistics_(interval_histogram_, unit, supported_buckets),
-      cumulative_statistics_(cumulative_histogram_, unit, supported_buckets), id_(id) {
+      interval_statistics_(interval_histogram_, unit, supported_buckets, prepared_query),
+      cumulative_statistics_(cumulative_histogram_, unit, supported_buckets, prepared_query),
+      id_(id) {
   RELEASE_ASSERT(!bins.has_value() || bins.value() < NoBins, "Histogram bins exceed uint16_t");
 }
 
@@ -1333,8 +1341,8 @@ void ParentHistogramImpl::merge() {
     // because the tls_histogram merge is not that expensive as it is a single histogram
     // merge and adding TLS histograms is rare.
 
-    // Accumulating each source rebuilds the result. Send only sources with content during
-    // the current interval.
+    // Accumulate all materialized sources in one call. The updated hist_accumulate implementation
+    // makes this cheaper than crossing the C boundary once per TLS histogram.
     absl::InlinedVector<histogram_t*, 32> sources;
     absl::InlinedVector<const histogram_t*, 32> const_sources;
     bool has_interval_data = false;
@@ -1346,21 +1354,21 @@ void ParentHistogramImpl::merge() {
 
       histogram_t* source = tls_histogram->histogramForMerge();
       if (source != nullptr) {
+        has_interval_data = true;
         sources.push_back(source);
         const_sources.push_back(source);
       }
     }
 
-    if (!sources.empty()) {
-      has_interval_data = true;
-      ASSERT(sources.size() <= std::numeric_limits<int>::max());
+    if (!const_sources.empty()) {
       hist_accumulate(interval_histogram_, const_sources.data(),
                       static_cast<int>(const_sources.size()));
     }
 
     // Clear all used, even if hist_accumulate failed, so that next interval is clean.
-    for (histogram_t* source : sources) {
-      hist_clear(source);
+    if (!sources.empty()) {
+      ASSERT(sources.size() <= std::numeric_limits<int>::max());
+      hist_clear_many(sources.data(), static_cast<int>(sources.size()));
     }
 
     // TLS merge is done, we can release the lock here.
